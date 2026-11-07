@@ -262,18 +262,24 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
         audioDuration,
       });
 
+      const messageWithSender = {
+        ...res.message,
+        senderId: res.message.senderId || currentUser.id,
+        senderName: res.message.senderName || currentUser.displayName || currentUser.username,
+      };
+
       setMessages(prev => {
-        if (prev.some(m => m.id === res.message.id)) return prev;
-        return [...prev, res.message];
+        if (prev.some(m => m.id === messageWithSender.id)) return prev;
+        return [...prev, messageWithSender];
       });
       setChats(prev => prev.map(c => {
         if (c.id === selectedChat.id) {
           return {
             ...c,
             lastMessage: {
-              content: res.message.content,
+              content: messageWithSender.content,
               senderId: currentUser.id,
-              createdAt: res.message.createdAt,
+              createdAt: messageWithSender.createdAt,
             },
           };
         }

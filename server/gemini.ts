@@ -21,6 +21,27 @@ function getAIClient(): GoogleGenAI | null {
   return aiClient;
 }
 
+export function setGeminiApiKey(newKey: string): void {
+  const cleanKey = newKey.trim();
+  process.env.GEMINI_API_KEY = cleanKey;
+  aiClient = new GoogleGenAI({
+    apiKey: cleanKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+}
+
+export function getGeminiKeyStatus(): { configured: boolean; maskedKey?: string } {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || !key.trim()) return { configured: false };
+  const clean = key.trim();
+  const masked = clean.length > 10 ? `${clean.slice(0, 6)}...${clean.slice(-4)}` : '***';
+  return { configured: true, maskedKey: masked };
+}
+
 function getValidGeminiModel(configuredModel?: string): string {
   if (!configuredModel || configuredModel.includes('2.5') || configuredModel.includes('1.5')) {
     return 'gemini-3.8-flash';

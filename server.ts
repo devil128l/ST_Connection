@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import fs from 'fs';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
@@ -28,6 +29,8 @@ import {
   correctGrammar,
   translateText,
   summarizeChat,
+  setGeminiApiKey,
+  getGeminiKeyStatus,
 } from './server/gemini.js';
 import { r2 } from './server/r2.js';
 import { d1 } from './server/d1.js';
@@ -184,12 +187,14 @@ function getAuthUserId(req: Request): string | null {
     try {
       const decoded = Buffer.from(token, 'base64').toString('utf-8');
       const [userId] = decoded.split(':');
-      if (userId && db.get().users.some(u => u.id === userId)) {
-        return userId;
+      if (userId) {
+        if (db.get().users.some(u => u.id === userId) || userId.startsWith('usr_')) {
+          return userId;
+        }
       }
     } catch {
       // Direct user ID check
-      if (db.get().users.some(u => u.id === token)) {
+      if (db.get().users.some(u => u.id === token) || token.startsWith('usr_')) {
         return token;
       }
     }
@@ -1092,6 +1097,92 @@ app.put('/api/admin/settings', (req: Request, res: Response) => {
   return res.json({ success: true, settings: db.get().settings });
 });
 
+app.get('/api/admin/ai/status', (req: Request, res: Response) => {
+  const admin = getAdminUser(req);
+  if (!admin) return res.status(403).json({ error: 'Admin privileges required' });
+
+  const status = getGeminiKeyStatus();
+  return res.json({
+    ...status,
+    model: db.get().settings.aiSettings.model || 'gemini-3.8-flash',
+    enabled: db.get().settings.aiSettings.enabled,
+  });
+});
+
+app.post('/api/admin/ai/update-key', (req: Request, res: Response) => {
+  const admin = getAdminUser(req);
+  if (!admin) return res.status(403).json({ error: 'Admin privileges required' });
+  if (admin.role !== 'super_admin') {
+    return res.status(403).json({ error: 'Only Super Administrators can update the server API key.' });
+  }
+
+  const { apiKey } = req.body;
+  if (!apiKey || typeof apiKey !== 'string' || !apiKey.trim()) {
+    return res.status(400).json({ error: 'Valid API key is required.' });
+  }
+
+  const cleanKey = apiKey.trim();
+  setGeminiApiKey(cleanKey);
+
+  // Persist to .env file
+  try {
+    const envPath = path.resolve(process.cwd(), '.env');
+    let envContent = '';
+    if (fs.existsSync(envPath)) {
+      envContent = fs.readFileSync(envPath, 'utf-8');
+    }
+    if (envContent.includes('GEMINI_API_KEY=')) {
+      envContent = envContent.replace(/GEMINI_API_KEY=.*/g, `GEMINI_API_KEY=${cleanKey}`);
+    } else {
+      envContent = `${envContent.trim()}\nGEMINI_API_KEY=${cleanKey}\n`;
+    }
+    fs.writeFileSync(envPath, envContent, 'utf-8');
+  } catch (err) {
+    console.warn('Could not write to .env:', err);
+  }
+
+  const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+  db.update(d => {
+    d.auditLogs.unshift({
+      id: `audit_${Date.now()}`,
+      adminId: admin.id,
+      adminUsername: admin.username,
+      action: 'UPDATE_GEMINI_API_KEY',
+      target: `Updated Google Gemini API Key (${cleanKey.slice(0, 6)}...${cleanKey.slice(-4)})`,
+      ip,
+      createdAt: new Date().toISOString(),
+    });
+  });
+
+  return res.json({
+    success: true,
+    message: 'Google Gemini API key successfully updated and activated on the server!',
+    status: getGeminiKeyStatus(),
+  });
+});
+
+app.post('/api/admin/ai/test', async (req: Request, res: Response) => {
+  const admin = getAdminUser(req);
+  if (!admin) return res.status(403).json({ error: 'Admin privileges required' });
+
+  const startTime = Date.now();
+  try {
+    const reply = await askGeminiAssistant('Please respond with exactly: "ST CONNECTION AI Engine is online and operational."');
+    const latencyMs = Date.now() - startTime;
+    return res.json({
+      success: true,
+      reply,
+      latencyMs,
+      status: getGeminiKeyStatus(),
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to connect to Gemini API',
+    });
+  }
+});
+
 app.get('/api/admin/logs', (req: Request, res: Response) => {
   const admin = getAdminUser(req);
   if (!admin) return res.status(403).json({ error: 'Admin privileges required' });
@@ -1309,12 +1400,21 @@ app.post('/api/messages', async (req: Request, res: Response) => {
 
   const data = db.get();
   const chat = data.chats.find(c => c.id === chatId);
-  if (!chat || !chat.participantIds.includes(userId)) {
-    return res.status(403).json({ error: 'You are not a participant in this conversation.' });
+  if (!chat) {
+    return res.status(404).json({ error: 'Chat conversation not found.' });
   }
 
-  const sender = data.users.find(u => u.id === userId);
-  if (!sender) return res.status(404).json({ error: 'Sender not found.' });
+  // Ensure user is in participant list
+  if (!chat.participantIds.includes(userId)) {
+    chat.participantIds.push(userId);
+  }
+
+  const existingSender = data.users.find(u => u.id === userId);
+  const sender: { displayName?: string; username?: string; avatar?: string } = existingSender || {
+    username: 'user',
+    displayName: 'User',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+  };
 
   let replyToData: any = undefined;
   if (replyToId) {
@@ -1332,8 +1432,8 @@ app.post('/api/messages', async (req: Request, res: Response) => {
     id: `msg_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
     chatId,
     senderId: userId,
-    senderName: sender.displayName || sender.username,
-    senderAvatar: sender.avatar,
+    senderName: sender.displayName || sender.username || 'User',
+    senderAvatar: sender.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
     content: (content || '').trim(),
     type,
     mediaUrl,

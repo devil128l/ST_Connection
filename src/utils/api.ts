@@ -595,6 +595,23 @@ class ApiService {
       method: 'POST',
     });
   }
+
+  async getAdminAiStatus() {
+    return this.request<{ configured: boolean; maskedKey?: string; model: string; enabled: boolean }>('/api/admin/ai/status');
+  }
+
+  async updateAdminAiKey(apiKey: string) {
+    return this.request<{ success: boolean; message: string; status: { configured: boolean; maskedKey?: string } }>('/api/admin/ai/update-key', {
+      method: 'POST',
+      body: JSON.stringify({ apiKey }),
+    });
+  }
+
+  async testAdminAi() {
+    return this.request<{ success: boolean; reply: string; latencyMs: number; status: { configured: boolean; maskedKey?: string } }>('/api/admin/ai/test', {
+      method: 'POST',
+    });
+  }
 }
 
 export const api = new ApiService();

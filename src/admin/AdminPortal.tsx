@@ -74,6 +74,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
   // Action status message
   const [actionAlert, setActionAlert] = useState<{ text: string; isError?: boolean } | null>(null);
 
+  // Gemini AI Engine key and test states
+  const [aiKeyStatus, setAiKeyStatus] = useState<{ configured: boolean; maskedKey?: string } | null>(null);
+  const [newApiKey, setNewApiKey] = useState('');
+  const [updatingAiKey, setUpdatingAiKey] = useState(false);
+  const [testingAi, setTestingAi] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<{ success: boolean; message: string; latency?: number } | null>(null);
+
   useEffect(() => {
     // Check existing admin session
     api.getAdminUsers()
@@ -108,6 +115,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
       setMaintMessage(settingsRes.settings.maintenanceMessage || 'ST CONNECTION is currently performing scheduled system updates. Service will resume shortly.');
       setLogs(logsRes);
       setSessions(sessionsRes.sessions);
+
+      // Load AI key status
+      api.getAdminAiStatus().then(st => setAiKeyStatus(st)).catch(() => {});
     } catch (err: any) {
       console.warn('Failed to load admin data:', err);
     }
@@ -288,6 +298,47 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
       notify('Database reset to factory default seeding.');
     } catch (e: any) {
       notify(e?.message, true);
+    }
+  };
+
+  const handleUpdateAiKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newApiKey.trim()) {
+      notify('Please enter an API key.', true);
+      return;
+    }
+    setUpdatingAiKey(true);
+    try {
+      const res = await api.updateAdminAiKey(newApiKey.trim());
+      setAiKeyStatus(res.status);
+      setNewApiKey('');
+      notify(res.message || 'API key updated successfully!');
+    } catch (err: any) {
+      notify(err?.message || 'Failed to update API key.', true);
+    } finally {
+      setUpdatingAiKey(false);
+    }
+  };
+
+  const handleTestAi = async () => {
+    setTestingAi(true);
+    setAiTestResult(null);
+    try {
+      const res = await api.testAdminAi();
+      setAiTestResult({
+        success: true,
+        message: res.reply || 'AI Engine responded successfully.',
+        latency: res.latencyMs,
+      });
+      notify(`Gemini connection verified (${res.latencyMs}ms)!`);
+    } catch (err: any) {
+      setAiTestResult({
+        success: false,
+        message: err?.message || 'Connection failed. Please check key validity.',
+      });
+      notify('Gemini connection test failed.', true);
+    } finally {
+      setTestingAi(false);
     }
   };
 
@@ -1081,9 +1132,126 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
             <div className="space-y-6 max-w-4xl mx-auto">
               <div>
                 <h2 className="text-xl font-bold text-white">Google Gemini AI Engine Controls</h2>
-                <p className="text-xs text-slate-400">Manage server-side Gemini intelligence models, system instructions, and token limits</p>
+                <p className="text-xs text-slate-400">Manage server-side Gemini intelligence models, system instructions, and API key authentication</p>
               </div>
 
+              {/* 1. API KEY CONFIGURATION & STATUS */}
+              <div className="p-5 rounded-2xl bg-[#0f171e] border border-[#1e293b] space-y-4 shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#1e293b]">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                      <KeyRound className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Google Gemini API Authentication</h3>
+                      <p className="text-xs text-slate-400">Server-side proxy authentication (`GEMINI_API_KEY`)</p>
+                    </div>
+                  </div>
+
+                  {/* Status Indicator */}
+                  <div className="flex items-center gap-2">
+                    {aiKeyStatus?.configured ? (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Active ({aiKeyStatus.maskedKey})</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        <span>Not Configured</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* API Key Update Form (Super Admin only) */}
+                {adminUser.role === 'super_admin' ? (
+                  <form onSubmit={handleUpdateAiKey} className="space-y-3">
+                    <label className="block text-xs font-medium text-slate-300">
+                      Set / Update Server API Key
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="password"
+                        value={newApiKey}
+                        onChange={(e) => setNewApiKey(e.target.value)}
+                        placeholder={aiKeyStatus?.configured ? "Enter new API key to replace current key..." : "Paste Gemini API key (e.g. AQ.Ab8...)"}
+                        className="flex-1 bg-[#18222d] border border-[#263442] focus:border-emerald-500 rounded-xl px-4 py-2.5 text-xs text-white placeholder:text-slate-500 outline-none font-mono"
+                      />
+                      <button
+                        type="submit"
+                        disabled={updatingAiKey || !newApiKey.trim()}
+                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shrink-0 shadow-lg shadow-emerald-950/30"
+                      >
+                        {updatingAiKey && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                        <span>Save & Activate Key</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      This updates the active key in server memory and writes it to the server environment. The key is never exposed to browser clients or external scripts.
+                    </p>
+                  </form>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">
+                    Only Super Administrators have permission to modify the backend API key credentials.
+                  </p>
+                )}
+
+                {/* Live Test Connection Button & Output */}
+                <div className="pt-3 border-t border-[#1e293b] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="text-xs text-slate-300">
+                    Verify live communication with Google Gemini servers:
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTestAi}
+                    disabled={testingAi}
+                    className="px-4 py-2 bg-[#1e293b] hover:bg-[#283548] text-slate-200 hover:text-white text-xs font-semibold rounded-xl border border-[#334155] transition flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                  >
+                    {testingAi ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                        <span>Testing Connection...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Test Live Connection</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Test Result Banner */}
+                {aiTestResult && (
+                  <div
+                    className={`p-3 rounded-xl text-xs border flex items-start gap-2.5 transition animate-in fade-in ${
+                      aiTestResult.success
+                        ? 'bg-emerald-950/40 text-emerald-200 border-emerald-500/30'
+                        : 'bg-rose-950/40 text-rose-200 border-rose-500/30'
+                    }`}
+                  >
+                    {aiTestResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1 space-y-1">
+                      <div className="font-semibold flex items-center justify-between">
+                        <span>{aiTestResult.success ? 'Gemini AI Verified & Active' : 'Connection Failed'}</span>
+                        {aiTestResult.latency && (
+                          <span className="font-mono text-[10px] bg-emerald-900/60 px-2 py-0.5 rounded text-emerald-300">
+                            {aiTestResult.latency}ms
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] leading-relaxed opacity-90">{aiTestResult.message}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. PLATFORM AI FEATURE TOGGLES & PROMPTS */}
               <div className="p-5 rounded-2xl bg-[#0f171e] border border-[#1e293b] space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-[#1e293b]">
                   <div>

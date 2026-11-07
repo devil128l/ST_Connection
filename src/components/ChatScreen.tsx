@@ -539,14 +539,53 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
         </div>
 
         {filteredMessages.map((msg, index) => {
-          const isMe = Boolean(
-            currentUser && (
-              msg.senderId === currentUser.id ||
-              msg.senderId === currentUser.username ||
-              (currentUser.email && msg.senderId === currentUser.email) ||
-              (msg.senderName && (msg.senderName === currentUser.displayName || msg.senderName === currentUser.username))
-            )
-          );
+          const effectiveUser = currentUser || api.getCurrentUser();
+          const myId = String(effectiveUser?.id || '').trim().toLowerCase();
+          const myUsername = String(effectiveUser?.username || '').trim().toLowerCase();
+          const myEmail = String(effectiveUser?.email || '').trim().toLowerCase();
+          const myDisplayName = String(effectiveUser?.displayName || '').trim().toLowerCase();
+
+          const senderId = String(msg.senderId || '').trim().toLowerCase();
+          const senderName = String(msg.senderName || '').trim().toLowerCase();
+
+          let isMe = false;
+
+          if (senderId && myId && senderId === myId) {
+            isMe = true;
+          } else if (senderId && myUsername && senderId === myUsername) {
+            isMe = true;
+          } else if (senderId && myEmail && senderId === myEmail) {
+            isMe = true;
+          } else if (senderId === 'me' || senderId === 'self') {
+            isMe = true;
+          } else if (senderName && myDisplayName && senderName === myDisplayName) {
+            isMe = true;
+          } else if (senderName && myUsername && senderName === myUsername) {
+            isMe = true;
+          } else if (chat && (chat.type === 'direct' || !chat.type)) {
+            // In a 1-to-1 conversation, if sender is NOT the other contact, it is ME!
+            const otherId = String(chat.otherParticipant?.id || '').trim().toLowerCase();
+            const otherUsername = String(chat.otherParticipant?.username || '').trim().toLowerCase();
+            const otherDisplayName = String(chat.otherParticipant?.displayName || '').trim().toLowerCase();
+
+            if (otherId && senderId === otherId) {
+              isMe = false;
+            } else if (otherUsername && senderId === otherUsername) {
+              isMe = false;
+            } else if (otherDisplayName && senderName === otherDisplayName) {
+              isMe = false;
+            } else if (otherId && senderId && senderId !== otherId) {
+              isMe = true;
+            } else if (chat.participantIds && chat.participantIds.length === 2) {
+              const otherInChat = chat.participantIds.find(p => String(p).trim().toLowerCase() !== myId);
+              if (otherInChat && senderId === String(otherInChat).trim().toLowerCase()) {
+                isMe = false;
+              } else if (otherInChat) {
+                isMe = true;
+              }
+            }
+          }
+
           const isStarred = msg.isStarredBy?.includes(currentUser.id);
           const hasReactions = msg.reactions && msg.reactions.length > 0;
 
@@ -554,12 +593,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
             <div
               key={`${msg.id || 'msg'}-${index}`}
               id={`msg-${msg.id}`}
-              className={`w-full flex flex-col group ${isMe ? 'items-end' : 'items-start'} relative`}
+              className={`w-full flex flex-col ${isMe ? 'items-end justify-end' : 'items-start justify-start'} group relative`}
             >
               {/* Context Action Toolbar on Hover */}
               <div
                 className={`opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute -top-8 ${
-                  isMe ? 'right-0' : 'left-0'
+                  isMe ? 'right-2' : 'left-2'
                 } z-10 flex items-center gap-1 bg-[#182229] border border-[#2a3942] rounded-lg p-1 shadow-lg`}
               >
                 {/* Quick Emoji Reaction buttons */}
@@ -629,8 +668,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
               <div
                 className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 py-2 relative shadow-md transition-all ${
                   isMe
-                    ? 'bg-[#005c4b] text-white rounded-tr-xs ml-auto border border-emerald-600/30'
-                    : 'bg-[#202c33] text-slate-100 rounded-tl-xs mr-auto border border-[#2a3942]'
+                    ? 'self-end ml-auto bg-[#005c4b] text-white rounded-tr-none border border-emerald-600/30'
+                    : 'self-start mr-auto bg-[#202c33] text-slate-100 rounded-tl-none border border-[#2a3942]'
                 }`}
               >
                 {/* Sender name for group chats */}
