@@ -31,6 +31,8 @@ import {
   Terminal,
   AlertTriangle,
   Wrench,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { api } from '../utils/api.js';
 import { SafeUser, SystemSettings } from '../types.js';
@@ -44,8 +46,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'maintenance' | 'users' | 'moderation' | 'website' | 'ai' | 'security'>('dashboard');
   const [loading, setLoading] = useState(true);
 
-  // Admin login state (only single master password required: "TishaSoham")
+  // Admin login state (only single master password required)
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
   // Data states
@@ -320,21 +323,28 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
 
             <form onSubmit={handleAdminLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center justify-between">
-                  <span>Administrator Master Password</span>
-                  <span className="text-[10px] text-slate-500 font-mono">Password: TishaSoham</span>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Administrator Password
                 </label>
                 <div className="relative">
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter admin password (TishaSoham)"
+                    placeholder="••••••••••••"
                     required
                     autoFocus
-                    className="w-full bg-[#18222d] border border-[#263442] focus:border-red-500 rounded-xl px-3.5 py-3 text-xs text-white outline-none transition pl-10"
+                    className="w-full bg-[#18222d] border border-[#263442] focus:border-red-500 rounded-xl px-3.5 py-3 text-xs text-white outline-none transition pl-10 pr-10"
                   />
                   <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-slate-400 hover:text-slate-200 absolute right-3.5 top-1/2 -translate-y-1/2 cursor-pointer p-0.5"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-1.5">
                   Direct master password access. No username or email required.

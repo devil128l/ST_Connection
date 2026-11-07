@@ -539,7 +539,14 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
         </div>
 
         {filteredMessages.map((msg, index) => {
-          const isMe = msg.senderId === currentUser.id;
+          const isMe = Boolean(
+            currentUser && (
+              msg.senderId === currentUser.id ||
+              msg.senderId === currentUser.username ||
+              (currentUser.email && msg.senderId === currentUser.email) ||
+              (msg.senderName && (msg.senderName === currentUser.displayName || msg.senderName === currentUser.username))
+            )
+          );
           const isStarred = msg.isStarredBy?.includes(currentUser.id);
           const hasReactions = msg.reactions && msg.reactions.length > 0;
 
@@ -547,7 +554,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
             <div
               key={`${msg.id || 'msg'}-${index}`}
               id={`msg-${msg.id}`}
-              className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'} relative`}
+              className={`w-full flex flex-col group ${isMe ? 'items-end' : 'items-start'} relative`}
             >
               {/* Context Action Toolbar on Hover */}
               <div
@@ -620,10 +627,10 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
 
               {/* Message Bubble Container */}
               <div
-                className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 py-2 relative shadow-md ${
+                className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 py-2 relative shadow-md transition-all ${
                   isMe
-                    ? 'bg-[#005c4b] text-white rounded-tr-none'
-                    : 'bg-[#202c33] text-slate-100 rounded-tl-none'
+                    ? 'bg-[#005c4b] text-white rounded-tr-xs ml-auto border border-emerald-600/30'
+                    : 'bg-[#202c33] text-slate-100 rounded-tl-xs mr-auto border border-[#2a3942]'
                 }`}
               >
                 {/* Sender name for group chats */}
