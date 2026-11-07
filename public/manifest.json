@@ -1,0 +1,17 @@
+{
+  "name": "ST CONNECTION",
+  "short_name": "ST Connect",
+  "description": "Real-Time Messaging Platform with Calling & AI Assistant",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b141a",
+  "theme_color": "#00a884",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

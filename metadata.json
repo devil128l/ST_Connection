@@ -1,0 +1,6 @@
+{
+  "name": "ST CONNECTION - Real-Time Messaging Platform",
+  "description": "Production-ready real-time messaging platform inspired by WhatsApp, Telegram and Discord with separate Admin portal, WebRTC calling, and Google Gemini AI.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
