@@ -362,9 +362,22 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
 
   const pinnedMsg = messages.find(m => m.isPinned);
 
+  // Deduplicate messages by ID before rendering to prevent duplicate keys
+  const uniqueMessages = React.useMemo(() => {
+    const seen = new Set<string>();
+    const list: Message[] = [];
+    for (const m of messages) {
+      if (m && m.id && !seen.has(m.id)) {
+        seen.add(m.id);
+        list.push(m);
+      }
+    }
+    return list;
+  }, [messages]);
+
   const filteredMessages = searchInChat.trim()
-    ? messages.filter(m => m.content.toLowerCase().includes(searchInChat.toLowerCase()))
-    : messages;
+    ? uniqueMessages.filter(m => m.content.toLowerCase().includes(searchInChat.toLowerCase()))
+    : uniqueMessages;
 
   const wallpaperClass = WALLPAPER_PRESETS.find(w => w.id === wallpaperId)?.class || 'bg-[#0b141a]';
 
@@ -525,14 +538,14 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
           </div>
         </div>
 
-        {filteredMessages.map((msg) => {
+        {filteredMessages.map((msg, index) => {
           const isMe = msg.senderId === currentUser.id;
           const isStarred = msg.isStarredBy?.includes(currentUser.id);
           const hasReactions = msg.reactions && msg.reactions.length > 0;
 
           return (
             <div
-              key={msg.id}
+              key={`${msg.id || 'msg'}-${index}`}
               id={`msg-${msg.id}`}
               className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'} relative`}
             >

@@ -21,6 +21,13 @@ function getAIClient(): GoogleGenAI | null {
   return aiClient;
 }
 
+function getValidGeminiModel(configuredModel?: string): string {
+  if (!configuredModel || configuredModel.includes('2.5') || configuredModel.includes('1.5')) {
+    return 'gemini-3.8-flash';
+  }
+  return configuredModel;
+}
+
 export async function askGeminiAssistant(prompt: string, contextMessages: { sender: string; content: string }[] = []): Promise<string> {
   const settings = db.get().settings;
   if (!settings.features.geminiAi || !settings.aiSettings.enabled) {
@@ -39,7 +46,7 @@ export async function askGeminiAssistant(prompt: string, contextMessages: { send
       : prompt;
 
     const response = await ai.models.generateContent({
-      model: settings.aiSettings.model || 'gemini-3.8-flash',
+      model: getValidGeminiModel(settings.aiSettings.model),
       contents: fullPrompt,
       config: {
         systemInstruction: settings.aiSettings.systemPrompt || 'You are the ST CONNECTION AI Assistant. Provide helpful, concise, and friendly responses.',

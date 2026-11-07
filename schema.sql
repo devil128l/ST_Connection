@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
   logo_url TEXT NOT NULL DEFAULT '/icon.svg',
   announcement TEXT NOT NULL DEFAULT 'Welcome to ST CONNECTION! Real-time messaging, WebRTC calling & Gemini AI are now live.',
   ai_enabled INTEGER NOT NULL DEFAULT 1,
-  ai_model TEXT NOT NULL DEFAULT 'gemini-2.5-flash',
+  ai_model TEXT NOT NULL DEFAULT 'gemini-3.8-flash',
   ai_daily_limit INTEGER NOT NULL DEFAULT 150,
   ai_system_prompt TEXT NOT NULL DEFAULT 'You are the ST CONNECTION AI Assistant. Provide concise, friendly, helpful answers with proper formatting.',
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))

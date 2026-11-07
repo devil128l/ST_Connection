@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   MessageSquare,
   CircleDashed,
@@ -56,6 +56,8 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
   const [activeTab, setActiveTab] = useState<'chats' | 'stories' | 'channels' | 'calls' | 'contacts' | 'settings'>('chats');
   const [chats, setChats] = useState<Chat[]>([]);
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
+  const selectedChatRef = useRef<Chat | null>(null);
+  selectedChatRef.current = selectedChat;
   const [messages, setMessages] = useState<Message[]>([]);
   const [stories, setStories] = useState<Story[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -95,7 +97,7 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
           if (message.senderId !== currentUser.id) {
             sounds.playMessageReceived();
           }
-          if (selectedChat && selectedChat.id === chatId) {
+          if (selectedChatRef.current && selectedChatRef.current.id === chatId) {
             setMessages(prev => {
               if (prev.some(m => m.id === message.id)) return prev;
               return [...prev, message];
@@ -126,7 +128,7 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
 
         case 'typing_status': {
           const { chatId, isTyping } = payload;
-          if (selectedChat && selectedChat.id === chatId) {
+          if (selectedChatRef.current && selectedChatRef.current.id === chatId) {
             setPartnerTyping(isTyping);
           }
           break;
@@ -222,7 +224,15 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
   const loadMessages = async (chatId: string) => {
     try {
       const res = await api.getMessages(chatId);
-      setMessages(res.messages);
+      const seen = new Set<string>();
+      const deduped: Message[] = [];
+      for (const m of res.messages) {
+        if (m && m.id && !seen.has(m.id)) {
+          seen.add(m.id);
+          deduped.push(m);
+        }
+      }
+      setMessages(deduped);
     } catch (e) {
       console.error(e);
     }
@@ -252,7 +262,10 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
         audioDuration,
       });
 
-      setMessages(prev => [...prev, res.message]);
+      setMessages(prev => {
+        if (prev.some(m => m.id === res.message.id)) return prev;
+        return [...prev, res.message];
+      });
       setChats(prev => prev.map(c => {
         if (c.id === selectedChat.id) {
           return {

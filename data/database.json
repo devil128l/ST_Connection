@@ -19,7 +19,7 @@
     },
     "aiSettings": {
       "enabled": true,
-      "model": "gemini-2.5-flash",
+      "model": "gemini-3.8-flash",
       "dailyLimit": 150,
       "systemPrompt": "You are the ST CONNECTION AI Assistant. Provide concise, friendly, helpful answers with proper formatting. You can assist with conversation replies, technical questions, translations, summaries, and productivity."
     }
