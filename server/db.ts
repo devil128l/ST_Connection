@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import mysql, { Pool } from 'mysql2/promise';
 
 export interface User {
   id: string;
@@ -375,9 +376,112 @@ function getDefaultDatabase(): DatabaseSchema {
 
 class DatabaseManager {
   private data: DatabaseSchema;
+  private mysqlPool: Pool | null = null;
+  private isMysqlConnected: boolean = false;
+  private mysqlConfig: { host: string; port: number; user: string; database: string } | null = null;
+  private mysqlError: string | null = null;
 
   constructor() {
     this.data = this.load();
+    this.initMysql().catch(err => {
+      console.warn('[Pterodactyl Database] MySQL startup check:', err?.message || err);
+    });
+  }
+
+  public async initMysql() {
+    const host = process.env.DB_HOST || process.env.MYSQL_HOST || process.env.DATABASE_HOST;
+    const port = Number(process.env.DB_PORT || process.env.MYSQL_PORT || process.env.DATABASE_PORT || 3306);
+    const user = process.env.DB_USER || process.env.DB_USERNAME || process.env.MYSQL_USER;
+    const password = process.env.DB_PASSWORD || process.env.MYSQL_PASSWORD || '';
+    const database = process.env.DB_NAME || process.env.DB_DATABASE || process.env.MYSQL_DATABASE;
+    const connectionUri = process.env.DATABASE_URL;
+
+    if (!host && !connectionUri) {
+      console.log('[Pterodactyl Database] No MySQL environment variables (DB_HOST/DATABASE_URL) detected. Running on local database (data/database.json).');
+      return;
+    }
+
+    try {
+      if (connectionUri) {
+        this.mysqlPool = mysql.createPool({
+          uri: connectionUri,
+          waitForConnections: true,
+          connectionLimit: 10,
+          queueLimit: 0,
+        });
+      } else if (host && user && database) {
+        this.mysqlConfig = { host, port, user, database };
+        this.mysqlPool = mysql.createPool({
+          host,
+          port,
+          user,
+          password,
+          database,
+          waitForConnections: true,
+          connectionLimit: 10,
+          queueLimit: 0,
+        });
+      } else {
+        return;
+      }
+
+      // Test connection
+      const connection = await this.mysqlPool.getConnection();
+      connection.release();
+
+      // Ensure storage table exists in Pterodactyl MySQL
+      await this.mysqlPool.execute(`
+        CREATE TABLE IF NOT EXISTS st_storage (
+          storage_key VARCHAR(64) PRIMARY KEY,
+          storage_data LONGTEXT NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+      `);
+
+      this.isMysqlConnected = true;
+      this.mysqlError = null;
+      console.log(`[Pterodactyl Database] ✅ Successfully connected to Pterodactyl MySQL database '${database || 'custom'}' at ${host}:${port}!`);
+
+      // Hydrate state from MySQL if data already exists
+      const [rows] = await this.mysqlPool.execute<any[]>(
+        `SELECT storage_data FROM st_storage WHERE storage_key = 'main_database' LIMIT 1;`
+      );
+
+      if (rows && rows.length > 0 && rows[0].storage_data) {
+        try {
+          const parsed = JSON.parse(rows[0].storage_data);
+          if (parsed && parsed.settings && parsed.users) {
+            this.data = parsed;
+            try {
+              fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
+            } catch {}
+            console.log(`[Pterodactyl Database] Synced ${this.data.users.length} users and ${this.data.messages.length} messages from Pterodactyl MySQL.`);
+          }
+        } catch (e) {
+          console.error('[Pterodactyl Database] Error parsing MySQL data:', e);
+        }
+      } else {
+        // Initial seed into MySQL
+        await this.syncToMysql();
+      }
+    } catch (err: any) {
+      this.mysqlError = err?.message || 'Connection failed';
+      this.isMysqlConnected = false;
+      console.warn(`[Pterodactyl Database] Could not connect to MySQL at ${host || 'endpoint'}: ${err?.message}. Active fallback: local persistent database.`);
+    }
+  }
+
+  public async syncToMysql() {
+    if (!this.mysqlPool || !this.isMysqlConnected) return;
+    try {
+      const json = JSON.stringify(this.data);
+      await this.mysqlPool.execute(
+        `REPLACE INTO st_storage (storage_key, storage_data) VALUES ('main_database', ?)`,
+        [json]
+      );
+    } catch (err) {
+      console.error('[Pterodactyl Database] Error syncing state to MySQL:', err);
+    }
   }
 
   private load(): DatabaseSchema {
@@ -420,6 +524,7 @@ class DatabaseManager {
     } catch (err) {
       console.error('Failed to write database file:', err);
     }
+    this.syncToMysql().catch(() => {});
   }
 
   public get(): DatabaseSchema {
@@ -436,6 +541,17 @@ class DatabaseManager {
     this.data = fresh;
     this.save();
     return this.data;
+  }
+
+  public getDatabaseInfo() {
+    return {
+      type: this.isMysqlConnected ? 'Pterodactyl MySQL / MariaDB' : 'Local Persistent JSON Database',
+      connected: this.isMysqlConnected,
+      host: this.mysqlConfig?.host || (process.env.DB_HOST ? `${process.env.DB_HOST}:${process.env.DB_PORT || 3306}` : 'localhost (local storage)'),
+      database: this.mysqlConfig?.database || process.env.DB_NAME || 'data/database.json',
+      user: this.mysqlConfig?.user || process.env.DB_USER || 'local',
+      error: this.mysqlError,
+    };
   }
 }
 

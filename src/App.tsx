@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from './utils/api.js';
 import { SafeUser } from './types.js';
-import { GateLockScreen } from './components/GateLockScreen.js';
 import { AuthModal } from './components/AuthModal.js';
 import { MainChatApp } from './components/MainChatApp.js';
 import { AdminPortal } from './admin/AdminPortal.js';
@@ -19,13 +18,16 @@ export default function App() {
     return 'main';
   });
 
-  // Main website gate verification state (access password "782223")
-  const [isGateVerified, setIsGateVerified] = useState<boolean>(() => {
-    return Boolean(api.getGateToken() || sessionStorage.getItem('st_gate_token'));
+  // Current authenticated chat user (isolated from admin session)
+  const [currentUser, setCurrentUser] = useState<SafeUser | null>(() => {
+    const user = api.getCurrentUser();
+    // Prevent accidental superadmin contamination from old sessions
+    if (user && user.role === 'super_admin' && !api.getAuthToken()) {
+      api.clearAuthSession();
+      return null;
+    }
+    return user;
   });
-
-  // Current authenticated chat user
-  const [currentUser, setCurrentUser] = useState<SafeUser | null>(() => api.getCurrentUser());
 
   // Platform public configuration
   const [gateConfig, setGateConfig] = useState<{
@@ -65,6 +67,8 @@ export default function App() {
   const handleSwitchToMain = () => {
     setCurrentPortal('main');
     window.history.replaceState({}, '', '/');
+    const chatUser = api.getCurrentUser();
+    setCurrentUser(chatUser);
   };
 
   // Maintenance mode screen if active and not in admin portal
@@ -89,22 +93,10 @@ export default function App() {
     );
   }
 
-  // PORTAL 1: SEPARATE ADMIN WEBSITE (admin.stconnection.bond)
+  // PORTAL 1: SEPARATE ADMIN WEBSITE
   if (currentPortal === 'admin') {
     return (
       <AdminPortal onSwitchToMainSite={handleSwitchToMain} />
-    );
-  }
-
-  // PORTAL 2: MAIN MESSAGING PLATFORM (stconnection.bond)
-  // Step 2A: Visitor must first pass the Common Access Password ("782223")
-  if (!isGateVerified) {
-    return (
-      <GateLockScreen
-        onVerified={() => setIsGateVerified(true)}
-        siteName={gateConfig?.siteName || 'ST CONNECTION'}
-        logoUrl={gateConfig?.logoUrl || '/icon.svg'}
-      />
     );
   }
 

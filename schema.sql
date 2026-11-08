@@ -1,6 +1,6 @@
 -- ====================================================================
--- ST CONNECTION – Cloudflare D1 Database Schema
--- Compatible with Cloudflare D1 (SQLite at the Edge)
+-- ST CONNECTION – SQLite Database Schema
+-- Compatible with SQLite3 / Node.js
 -- ====================================================================
 
 -- 1. SYSTEM SETTINGS

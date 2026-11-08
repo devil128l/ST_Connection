@@ -60,6 +60,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [logs, setLogs] = useState<{ auditLogs: any[]; loginLogs: any[] }>({ auditLogs: [], loginLogs: [] });
   const [sessions, setSessions] = useState<any[]>([]);
+  const [dbInfo, setDbInfo] = useState<any>(null);
 
   // Username badge assignment tool state
   const [badgeUsername, setBadgeUsername] = useState('');
@@ -82,20 +83,31 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
   const [aiTestResult, setAiTestResult] = useState<{ success: boolean; message: string; latency?: number } | null>(null);
 
   useEffect(() => {
-    // Check existing admin session
-    api.getAdminUsers()
-      .then(res => {
-        // Has valid admin credentials
-        const currentUser = api.getCurrentUser();
-        if (currentUser && (currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'moderator')) {
-          setAdminUser(currentUser);
-          loadAdminData();
-        }
-      })
-      .catch(() => {
-        // Not logged in as admin yet
-      })
-      .finally(() => setLoading(false));
+    // Check existing admin session (isolated from chat user session)
+    const existingAdmin = api.getAdminUser();
+    if (existingAdmin && (existingAdmin.role === 'super_admin' || existingAdmin.role === 'admin' || existingAdmin.role === 'moderator')) {
+      setAdminUser(existingAdmin);
+      loadAdminData();
+      setLoading(false);
+      return;
+    }
+
+    if (api.getAdminToken()) {
+      api.getAdminUsers()
+        .then(() => {
+          const admin = api.getAdminUser();
+          if (admin) {
+            setAdminUser(admin);
+            loadAdminData();
+          }
+        })
+        .catch(() => {
+          api.clearAdminSession();
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
   }, []);
 
   const loadAdminData = async () => {
@@ -116,8 +128,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
       setLogs(logsRes);
       setSessions(sessionsRes.sessions);
 
-      // Load AI key status
+      // Load AI key status & Database status
       api.getAdminAiStatus().then(st => setAiKeyStatus(st)).catch(() => {});
+      api.getDatabaseStatus().then(info => setDbInfo(info)).catch(() => {});
     } catch (err: any) {
       console.warn('Failed to load admin data:', err);
     }
@@ -129,7 +142,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
     try {
       const res = await api.adminLogin(password);
       if (res.admin) {
-        api.setAuthSession(res.token, res.admin);
+        // Isolated admin session - does NOT overwrite chat user session
+        api.setAdminSession(res.token, res.admin);
         setAdminUser(res.admin);
         loadAdminData();
       }
@@ -139,7 +153,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
   };
 
   const handleAdminLogout = () => {
-    api.clearAuthSession();
+    api.clearAdminSession();
     setAdminUser(null);
   };
 
@@ -1315,6 +1329,83 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
               <div>
                 <h2 className="text-xl font-bold text-white">Security Governance, Audit Logs & Database Snapshots</h2>
                 <p className="text-xs text-slate-400">Complete audit logs, backup export, and restoration</p>
+              </div>
+
+              {/* Pterodactyl Panel MySQL Database Status */}
+              <div className="p-5 rounded-2xl bg-[#0f171e] border border-[#1e293b] space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+                      <Server className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <span>Pterodactyl Panel Database Engine</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                          dbInfo?.connected
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                            : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        }`}>
+                          {dbInfo?.connected ? 'MySQL Active' : 'Local Fallback'}
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        {dbInfo?.type || 'Loading database status...'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      api.getDatabaseStatus().then(info => {
+                        setDbInfo(info);
+                        notify('Database status refreshed.');
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-[#18222d] hover:bg-[#202c38] text-slate-300 border border-[#263442] text-xs rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Check Connection</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                  <div className="p-3 rounded-xl bg-[#080d12] border border-[#1e293b]">
+                    <div className="text-[11px] text-slate-400 font-medium">Database Host</div>
+                    <div className="text-xs font-semibold text-slate-200 mt-0.5 truncate font-mono">
+                      {dbInfo?.host || 'localhost'}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#080d12] border border-[#1e293b]">
+                    <div className="text-[11px] text-slate-400 font-medium">Database Name</div>
+                    <div className="text-xs font-semibold text-slate-200 mt-0.5 truncate font-mono">
+                      {dbInfo?.database || 'database.json'}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#080d12] border border-[#1e293b]">
+                    <div className="text-[11px] text-slate-400 font-medium">Database User</div>
+                    <div className="text-xs font-semibold text-slate-200 mt-0.5 truncate font-mono">
+                      {dbInfo?.user || 'local'}
+                    </div>
+                  </div>
+                </div>
+
+                {!dbInfo?.connected && (
+                  <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20 text-xs text-slate-300 leading-relaxed">
+                    <span className="font-semibold text-blue-400">Pterodactyl Configuration Guide: </span>
+                    Pterodactyl panel ke <strong>Databases</strong> tab me jaakar database banayein aur server ke <strong>Startup / Environment Variables</strong> me yeh daalein:
+                    <div className="mt-2 p-2 rounded bg-black/40 font-mono text-[11px] text-emerald-400 space-y-0.5 select-all">
+                      <div>DB_HOST=&lt;your_pterodactyl_host&gt;</div>
+                      <div>DB_PORT=3306</div>
+                      <div>DB_NAME=&lt;database_name&gt;</div>
+                      <div>DB_USER=&lt;database_username&gt;</div>
+                      <div>DB_PASSWORD=&lt;database_password&gt;</div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Database Snapshots */}

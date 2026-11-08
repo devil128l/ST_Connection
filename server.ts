@@ -32,8 +32,6 @@ import {
   setGeminiApiKey,
   getGeminiKeyStatus,
 } from './server/gemini.js';
-import { r2 } from './server/r2.js';
-import { d1 } from './server/d1.js';
 
 dotenv.config();
 
@@ -42,7 +40,8 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
-const PORT = process.env.PORT || 3000;
+// Support standard PORT, Pterodactyl SERVER_PORT, and P_SERVER_PORT
+const PORT = process.env.SERVER_PORT || process.env.P_SERVER_PORT || process.env.PORT || 3000;
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -207,58 +206,66 @@ function createToken(userId: string): string {
 }
 
 // ==========================================
-// CLOUDFLARE INTEGRATION & STORAGE ENDPOINTS
+// VPS NATIVE FILE STORAGE ENDPOINTS
 // ==========================================
+const UPLOADS_DIR = path.resolve(process.cwd(), 'data', 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+app.use('/uploads', express.static(UPLOADS_DIR));
 
-// Get Cloudflare D1 & R2 configuration and status
+// Get storage configuration and status
 app.get('/api/storage/status', (_req: Request, res: Response) => {
   return res.json({
-    cloudflare: {
-      r2: r2.getConfigInfo(),
-      d1: d1.getConfigInfo(),
+    storage: {
+      provider: 'vps-local',
+      uploadPath: '/uploads',
+      status: 'active',
     },
   });
 });
 
-// Upload media file to Cloudflare R2 (or fallback to base64)
+// Upload media file directly to VPS disk
 app.post('/api/storage/upload', async (req: Request, res: Response) => {
   const userId = getAuthUserId(req);
   if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
-  const { dataUrl, prefix } = req.body;
+  const { dataUrl, prefix = 'media' } = req.body;
   if (!dataUrl) return res.status(400).json({ error: 'dataUrl is required' });
 
   try {
-    if (r2.isConfigured()) {
-      const r2Url = await r2.uploadDataUrl(dataUrl, prefix || 'chat_media');
-      if (r2Url) {
-        return res.json({ url: r2Url, provider: 'cloudflare-r2' });
-      }
+    const matches = dataUrl.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+    if (matches && matches.length === 3) {
+      const mimeType = matches[1];
+      const buffer = Buffer.from(matches[2], 'base64');
+      const extMap: Record<string, string> = {
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp',
+        'image/gif': 'gif',
+        'video/mp4': 'mp4',
+        'video/webm': 'webm',
+        'audio/webm': 'webm',
+        'audio/ogg': 'ogg',
+        'audio/mp3': 'mp3',
+        'audio/wav': 'wav',
+      };
+      const ext = extMap[mimeType] || 'bin';
+      const fileName = `${prefix}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
+      const filePath = path.join(UPLOADS_DIR, fileName);
+      fs.writeFileSync(filePath, buffer);
+      return res.json({ url: `/uploads/${fileName}`, provider: 'vps-local' });
     }
-    // Fallback if R2 credentials not yet configured
-    return res.json({ url: dataUrl, provider: 'local' });
+    return res.json({ url: dataUrl, provider: 'data-url' });
   } catch (err: any) {
     console.error('Storage upload error:', err);
     return res.status(500).json({ error: err.message || 'Upload failed' });
   }
 });
 
-// Direct Cloudflare R2 Presigned Upload URL for browser upload
-app.post('/api/storage/presigned-url', async (req: Request, res: Response) => {
-  const userId = getAuthUserId(req);
-  if (!userId) return res.status(401).json({ error: 'Authentication required' });
-
-  const { filename, mimeType, prefix } = req.body;
-  if (!filename || !mimeType) return res.status(400).json({ error: 'filename and mimeType required' });
-
-  if (!r2.isConfigured()) {
-    return res.status(503).json({ error: 'Cloudflare R2 is not configured in environment.' });
-  }
-
-  const result = await r2.getPresignedUploadUrl(filename, mimeType, prefix || 'uploads');
-  if (!result) return res.status(500).json({ error: 'Failed to generate presigned upload URL' });
-
-  return res.json(result);
+// Compatibility route for presigned URL
+app.post('/api/storage/presigned-url', async (_req: Request, res: Response) => {
+  return res.json({ useDirectUpload: true });
 });
 
 // ==========================================
@@ -1248,6 +1255,19 @@ app.post('/api/admin/database/reset', (req: Request, res: Response) => {
   return res.json({ success: true, message: 'Database reset to factory default seeding.' });
 });
 
+app.get('/api/admin/database/status', (req: Request, res: Response) => {
+  const admin = getAdminUser(req);
+  if (!admin) return res.status(403).json({ error: 'Admin privileges required' });
+
+  const info = db.getDatabaseInfo();
+  return res.json({
+    success: true,
+    ...info,
+    userCount: db.get().users.length,
+    messageCount: db.get().messages.length,
+  });
+});
+
 // ==========================================
 // 4. MESSAGING & CHATS
 // ==========================================
@@ -2095,8 +2115,13 @@ app.post('/api/gemini/summarize', async (req: Request, res: Response) => {
 // ==========================================
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
+  const distPath = path.resolve(__dirname, 'dist');
+  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
 
-  if (!isProd) {
+  if (!isProd || !hasDist) {
+    if (isProd && !hasDist) {
+      console.log('[Pterodactyl Auto-Setup] "dist" build not found yet. Automatically mounting Vite middleware so application starts immediately without manual build!');
+    }
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -2104,7 +2129,6 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req: Request, res: Response) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -2112,7 +2136,7 @@ async function startServer() {
   }
 
   server.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`ST CONNECTION backend server listening on http://0.0.0.0:${PORT}`);
+    console.log(`[Pterodactyl] ST CONNECTION backend server listening on http://0.0.0.0:${PORT}`);
   });
 }
 

@@ -1,5 +1,0 @@
-/*
-  X-Frame-Options: SAMEORIGIN
-  X-Content-Type-Options: nosniff
-  Permissions-Policy: camera=(self), microphone=(self), display-capture=(self)
-  Access-Control-Allow-Origin: *

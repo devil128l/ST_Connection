@@ -8,6 +8,9 @@ class ApiService {
   private wsListeners: Set<(event: { type: string; payload: any }) => void> = new Set();
   private reconnectTimer: any = null;
 
+  private adminToken: string | null = null;
+  private adminUser: SafeUser | null = null;
+
   constructor() {
     this.gateToken = localStorage.getItem('st_gate_token');
     this.authToken = localStorage.getItem('st_auth_token');
@@ -15,6 +18,14 @@ class ApiService {
     if (storedUser) {
       try {
         this.currentUser = JSON.parse(storedUser);
+      } catch {}
+    }
+
+    this.adminToken = sessionStorage.getItem('st_admin_token') || localStorage.getItem('st_admin_token');
+    const storedAdmin = sessionStorage.getItem('st_admin_user') || localStorage.getItem('st_admin_user');
+    if (storedAdmin) {
+      try {
+        this.adminUser = JSON.parse(storedAdmin);
       } catch {}
     }
   }
@@ -63,6 +74,39 @@ class ApiService {
   updateCurrentUser(user: SafeUser) {
     this.currentUser = user;
     localStorage.setItem('st_user', JSON.stringify(user));
+  }
+
+  // --- Admin Session (Strictly isolated from Chat User Session) ---
+  getAdminToken(): string | null {
+    return this.adminToken || sessionStorage.getItem('st_admin_token') || localStorage.getItem('st_admin_token');
+  }
+
+  getAdminUser(): SafeUser | null {
+    if (this.adminUser) return this.adminUser;
+    const storedAdmin = sessionStorage.getItem('st_admin_user') || localStorage.getItem('st_admin_user');
+    if (storedAdmin) {
+      try {
+        this.adminUser = JSON.parse(storedAdmin);
+        return this.adminUser;
+      } catch {}
+    }
+    return null;
+  }
+
+  setAdminSession(token: string, admin: SafeUser) {
+    this.adminToken = token;
+    this.adminUser = admin;
+    sessionStorage.setItem('st_admin_token', token);
+    sessionStorage.setItem('st_admin_user', JSON.stringify(admin));
+  }
+
+  clearAdminSession() {
+    this.adminToken = null;
+    this.adminUser = null;
+    sessionStorage.removeItem('st_admin_token');
+    sessionStorage.removeItem('st_admin_user');
+    localStorage.removeItem('st_admin_token');
+    localStorage.removeItem('st_admin_user');
   }
 
   // --- WebSocket Setup ---
@@ -141,7 +185,8 @@ class ApiService {
       ...(options.headers as Record<string, string>),
     };
 
-    const token = this.getAuthToken();
+    const isAdminEndpoint = endpoint.startsWith('/api/admin');
+    const token = isAdminEndpoint ? (this.getAdminToken() || this.getAuthToken()) : this.getAuthToken();
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -576,7 +621,7 @@ class ApiService {
   }
 
   async backupDatabase(): Promise<Blob> {
-    const token = this.getAuthToken();
+    const token = this.getAdminToken() || this.getAuthToken();
     const res = await fetch('/api/admin/database/backup', {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -594,6 +639,19 @@ class ApiService {
     return this.request<{ success: boolean; message: string }>('/api/admin/database/reset', {
       method: 'POST',
     });
+  }
+
+  async getDatabaseStatus() {
+    return this.request<{
+      type: string;
+      connected: boolean;
+      host: string;
+      database: string;
+      user: string;
+      error?: string | null;
+      userCount?: number;
+      messageCount?: number;
+    }>('/api/admin/database/status');
   }
 
   async getAdminAiStatus() {

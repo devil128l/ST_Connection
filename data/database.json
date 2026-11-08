@@ -63,10 +63,57 @@
       "twoFactorEnabled": false,
       "emailVerified": true,
       "createdAt": "2026-11-06T19:00:00.000Z"
+    },
+    {
+      "id": "usr_1794176173584_f83624",
+      "username": "rrrr",
+      "email": "refelstan@gmail.com",
+      "displayName": "Rrr",
+      "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "bio": "Hey there! I am using ST CONNECTION.",
+      "role": "user",
+      "verified": false,
+      "developer": false,
+      "status": "active",
+      "isOnline": true,
+      "lastSeen": "2026-11-08T22:17:12.619Z",
+      "passwordHash": "897531bbf21779269d3c0d798a4f1ac580a7bc1e2a967ec52febfc0bcf739b7470159ab587791b59b815d388ee1a43b1c378dd69826c8af828694522f054dec0",
+      "passwordSalt": "c7d5c19b0e36c2e224fc2c60b68fea1b",
+      "twoFactorEnabled": false,
+      "emailVerified": true,
+      "createdAt": "2026-11-08T22:16:13.585Z"
     }
   ],
-  "chats": [],
-  "messages": [],
+  "chats": [
+    {
+      "id": "chat_ai_usr_1794176173584_f83624",
+      "type": "direct",
+      "participantIds": [
+        "usr_1794176173584_f83624",
+        "usr_st_ai"
+      ],
+      "lastMessage": {
+        "content": "Hello Rrr! Welcome to ST CONNECTION. I am your real-time AI assistant. Ask me anything, or start a chat with any contact!",
+        "senderId": "usr_st_ai",
+        "createdAt": "2026-11-08T22:16:13.585Z"
+      },
+      "createdAt": "2026-11-08T22:16:13.585Z"
+    }
+  ],
+  "messages": [
+    {
+      "id": "msg_welcome_1794176173585",
+      "chatId": "chat_ai_usr_1794176173584_f83624",
+      "senderId": "usr_st_ai",
+      "senderName": "ST AI Assistant",
+      "senderAvatar": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80",
+      "content": "Hello Rrr! Welcome to ST CONNECTION. I am your real-time AI assistant. Ask me anything, or start a chat with any contact!",
+      "type": "text",
+      "reactions": [],
+      "status": "read",
+      "createdAt": "2026-11-08T22:16:13.585Z"
+    }
+  ],
   "channels": [
     {
       "id": "chn_official",
@@ -77,9 +124,10 @@
       "coverImage": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='200'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%230f172a'/%3E%3Cstop offset='50%25' stop-color='%23047857'/%3E%3Cstop offset='100%25' stop-color='%23064e3b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23g)'/%3E%3C/svg%3E",
       "ownerId": "usr_superadmin",
       "verified": true,
-      "subscribersCount": 1,
+      "subscribersCount": 2,
       "subscriberIds": [
-        "usr_superadmin"
+        "usr_superadmin",
+        "usr_1794176173584_f83624"
       ],
       "createdAt": "2026-11-06T19:00:00.000Z"
     }
@@ -91,6 +139,24 @@
   "reports": [],
   "auditLogs": [
     {
+      "id": "audit_1794176263668",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "action": "ADMIN_LOGIN",
+      "target": "Signed in to Admin Portal (super_admin)",
+      "ip": "127.0.0.1",
+      "createdAt": "2026-11-08T22:17:43.668Z"
+    },
+    {
+      "id": "audit_1794176200275",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "action": "ADMIN_LOGIN",
+      "target": "Signed in to Admin Portal (super_admin)",
+      "ip": "2409:4088:9d8b:5530::c88a:b20b, 169.254.169.126",
+      "createdAt": "2026-11-08T22:16:40.275Z"
+    },
+    {
       "id": "log_init",
       "adminId": "usr_superadmin",
       "adminUsername": "superadmin",
@@ -101,5 +167,26 @@
     }
   ],
   "loginLogs": [],
-  "adminSessions": []
+  "adminSessions": [
+    {
+      "sessionId": "sess_1794176263667_20d5f4e4",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "role": "super_admin",
+      "ip": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "createdAt": "2026-11-08T22:17:43.668Z",
+      "lastActiveAt": "2026-11-08T22:17:43.668Z"
+    },
+    {
+      "sessionId": "sess_1794176200274_8505dade",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "role": "super_admin",
+      "ip": "2409:4088:9d8b:5530::c88a:b20b, 169.254.169.126",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+      "createdAt": "2026-11-08T22:16:40.275Z",
+      "lastActiveAt": "2026-11-08T22:16:40.275Z"
+    }
+  ]
 }
