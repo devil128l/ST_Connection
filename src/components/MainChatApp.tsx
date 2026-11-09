@@ -71,6 +71,9 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [directoryUsers, setDirectoryUsers] = useState<SafeUser[]>([]);
 
+  // In-memory messages cache per chatId for instant (0ms) chat switches
+  const chatMessagesCacheRef = useRef<Record<string, Message[]>>({});
+
   // WebRTC Call session
   const [activeCallSession, setActiveCallSession] = useState<CallSession | null>(null);
 
@@ -97,8 +100,40 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
           if (message.senderId !== currentUser.id) {
             sounds.playMessageReceived();
           }
+
+          // Update cache immediately
+          if (!chatMessagesCacheRef.current[chatId]) {
+            chatMessagesCacheRef.current[chatId] = [];
+          }
+          const existingInCache = chatMessagesCacheRef.current[chatId];
+          // Check if replacing an optimistic message or already exists
+          const isTempDuplicate = existingInCache.some(m => 
+            m.id === message.id || 
+            (m.id.startsWith('temp_') && m.senderId === message.senderId && m.content === message.content)
+          );
+
+          if (!isTempDuplicate) {
+            chatMessagesCacheRef.current[chatId] = [...existingInCache, message];
+          } else {
+            chatMessagesCacheRef.current[chatId] = existingInCache.map(m => 
+              (m.id === message.id || (m.id.startsWith('temp_') && m.senderId === message.senderId && m.content === message.content))
+                ? message
+                : m
+            );
+          }
+
           if (selectedChatRef.current && selectedChatRef.current.id === chatId) {
             setMessages(prev => {
+              const hasMatchingTemp = prev.some(m => 
+                m.id.startsWith('temp_') && m.senderId === message.senderId && m.content === message.content
+              );
+              if (hasMatchingTemp) {
+                return prev.map(m => 
+                  (m.id.startsWith('temp_') && m.senderId === message.senderId && m.content === message.content)
+                    ? message
+                    : m
+                );
+              }
               if (prev.some(m => m.id === message.id)) return prev;
               return [...prev, message];
             });
@@ -123,6 +158,10 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
         case 'message_updated': {
           const { message } = payload;
           setMessages(prev => prev.map(m => m.id === message.id ? message : m));
+          if (selectedChatRef.current && chatMessagesCacheRef.current[selectedChatRef.current.id]) {
+            chatMessagesCacheRef.current[selectedChatRef.current.id] = 
+              chatMessagesCacheRef.current[selectedChatRef.current.id].map(m => m.id === message.id ? message : m);
+          }
           break;
         }
 
@@ -232,7 +271,10 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
           deduped.push(m);
         }
       }
-      setMessages(deduped);
+      chatMessagesCacheRef.current[chatId] = deduped;
+      if (selectedChatRef.current && selectedChatRef.current.id === chatId) {
+        setMessages(deduped);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -240,6 +282,13 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
 
   const handleSelectChat = (chat: Chat) => {
     setSelectedChat(chat);
+    // Instant switch (0ms) using in-memory cache if available
+    if (chatMessagesCacheRef.current[chat.id]) {
+      setMessages(chatMessagesCacheRef.current[chat.id]);
+    } else {
+      setMessages([]);
+    }
+    // Fetch latest in background to sync any missed messages
     loadMessages(chat.id);
   };
 
@@ -251,43 +300,94 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
     audioDuration?: number
   ) => {
     if (!selectedChat) return;
-    try {
-      sounds.playMessageSent();
-      const res = await api.sendMessage({
-        chatId: selectedChat.id,
-        content,
-        type,
-        mediaUrl,
-        replyToId,
-        audioDuration,
-      });
 
-      const messageWithSender = {
+    // 1. Instant optimistic update (0ms perceived latency!)
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    let replyToData: any = undefined;
+    if (replyToId) {
+      const parent = messages.find(m => m.id === replyToId);
+      if (parent) {
+        replyToData = {
+          id: parent.id,
+          senderName: parent.senderName,
+          content: parent.content.slice(0, 80),
+        };
+      }
+    }
+
+    const optimisticMsg: Message = {
+      id: tempId,
+      chatId: selectedChat.id,
+      senderId: currentUser.id,
+      senderName: currentUser.displayName || currentUser.username,
+      senderAvatar: currentUser.avatar,
+      content: (content || '').trim(),
+      type,
+      mediaUrl,
+      replyTo: replyToData,
+      reactions: [],
+      status: 'sent',
+      audioDuration,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Play sent sound immediately
+    sounds.playMessageSent();
+
+    // Render message immediately
+    setMessages(prev => [...prev, optimisticMsg]);
+
+    // Update in-memory cache immediately
+    if (!chatMessagesCacheRef.current[selectedChat.id]) {
+      chatMessagesCacheRef.current[selectedChat.id] = [];
+    }
+    chatMessagesCacheRef.current[selectedChat.id] = [
+      ...chatMessagesCacheRef.current[selectedChat.id],
+      optimisticMsg,
+    ];
+
+    // Update sidebar chat lastMessage preview immediately
+    setChats(prev => prev.map(c => {
+      if (c.id === selectedChat.id) {
+        return {
+          ...c,
+          lastMessage: {
+            content: optimisticMsg.content || (optimisticMsg.type === 'audio' ? '🎤 Voice message' : '📷 Attachment'),
+            senderId: currentUser.id,
+            createdAt: optimisticMsg.createdAt,
+          },
+        };
+      }
+      return c;
+    }));
+
+    // 2. Perform network request in background
+    api.sendMessage({
+      chatId: selectedChat.id,
+      content,
+      type,
+      mediaUrl,
+      replyToId,
+      audioDuration,
+    }).then(res => {
+      const realMessage = {
         ...res.message,
         senderId: res.message.senderId || currentUser.id,
         senderName: res.message.senderName || currentUser.displayName || currentUser.username,
+        senderAvatar: res.message.senderAvatar || currentUser.avatar,
       };
 
-      setMessages(prev => {
-        if (prev.some(m => m.id === messageWithSender.id)) return prev;
-        return [...prev, messageWithSender];
-      });
-      setChats(prev => prev.map(c => {
-        if (c.id === selectedChat.id) {
-          return {
-            ...c,
-            lastMessage: {
-              content: messageWithSender.content,
-              senderId: currentUser.id,
-              createdAt: messageWithSender.createdAt,
-            },
-          };
-        }
-        return c;
-      }));
-    } catch (e) {
-      console.error('Failed to send message:', e);
-    }
+      // Seamlessly replace optimistic temporary ID with real database ID
+      setMessages(prev => prev.map(m => m.id === tempId ? realMessage : m));
+
+      if (chatMessagesCacheRef.current[selectedChat.id]) {
+        chatMessagesCacheRef.current[selectedChat.id] = chatMessagesCacheRef.current[selectedChat.id].map(
+          m => m.id === tempId ? realMessage : m
+        );
+      }
+    }).catch(e => {
+      console.error('Failed to send message to server:', e);
+    });
   };
 
   const handleStartCall = async (type: 'voice' | 'video') => {

@@ -1387,14 +1387,17 @@ app.get('/api/chats/:id/messages', (req: Request, res: Response) => {
       return m;
     });
 
-  // Mark messages as read
-  db.update(d => {
-    d.messages.forEach(m => {
-      if (m.chatId === id && m.senderId !== userId && m.status !== 'read') {
-        m.status = 'read';
-      }
+  // Mark messages as read only if unread messages exist
+  const hasUnread = data.messages.some(m => m.chatId === id && m.senderId !== userId && m.status !== 'read');
+  if (hasUnread) {
+    db.update(d => {
+      d.messages.forEach(m => {
+        if (m.chatId === id && m.senderId !== userId && m.status !== 'read') {
+          m.status = 'read';
+        }
+      });
     });
-  });
+  }
 
   return res.json({ messages });
 });

@@ -89,28 +89,53 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const typingTimerRef = useRef<any>(null);
+  const lastTypingStatusRef = useRef<boolean>(false);
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
-  // Fetch AI smart reply suggestions when incoming message arrives
+  // Instant zero-latency contextual reply suggestions (no network lag!)
   useEffect(() => {
     const lastMsg = messages[messages.length - 1];
     if (lastMsg && lastMsg.senderId !== currentUser.id && lastMsg.type === 'text') {
-      api.getAiSuggestions(lastMsg.content)
-        .then(res => setAiSuggestions(res.suggestions || []))
-        .catch(() => setAiSuggestions(['Got it!', 'Sounds good!', 'Thanks!']));
+      const text = (lastMsg.content || '').toLowerCase();
+      if (text.includes('?') || text.includes('kya') || text.includes('kab') || text.includes('kaise') || text.includes('where')) {
+        setAiSuggestions(['Yes', 'No', 'Sure, let me check!', 'I will let you know 👍']);
+      } else if (text.includes('hello') || text.includes('hi') || text.includes('hey') || text.includes('salam')) {
+        setAiSuggestions(['Hey!', 'Hello! How are you?', 'Hi there! 👋']);
+      } else if (text.includes('thanks') || text.includes('thank you') || text.includes('shukriya')) {
+        setAiSuggestions(['You are welcome!', 'Anytime! 👍', 'No problem!']);
+      } else if (text.includes('ok') || text.includes('theek') || text.includes('acha') || text.includes('great')) {
+        setAiSuggestions(['Awesome! ✨', 'Sounds good!', 'Sure 👍']);
+      } else {
+        setAiSuggestions(['Got it!', 'Sounds good!', 'Sure 👍', 'Thanks!']);
+      }
     } else {
       setAiSuggestions([]);
     }
   }, [messages.length, currentUser.id]);
 
-  // Handle typing debounce
+  // Handle typing with debounced notifications to prevent socket flooding
   const handleInputChange = (val: string) => {
     setInputText(val);
-    if (onTypingChange) {
-      onTypingChange(val.length > 0);
+    const isNowTyping = val.trim().length > 0;
+    if (lastTypingStatusRef.current !== isNowTyping) {
+      lastTypingStatusRef.current = isNowTyping;
+      if (onTypingChange) {
+        onTypingChange(isNowTyping);
+      }
+    }
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    if (isNowTyping) {
+      typingTimerRef.current = setTimeout(() => {
+        if (lastTypingStatusRef.current) {
+          lastTypingStatusRef.current = false;
+          if (onTypingChange) onTypingChange(false);
+        }
+      }, 2500);
     }
   };
 

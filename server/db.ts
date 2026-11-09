@@ -471,6 +471,11 @@ class DatabaseManager {
     }
   }
 
+  private saveTimer: NodeJS.Timeout | null = null;
+  private mysqlSyncTimer: NodeJS.Timeout | null = null;
+  private isSavingFile: boolean = false;
+  private pendingFileWrite: boolean = false;
+
   public async syncToMysql() {
     if (!this.mysqlPool || !this.isMysqlConnected) return;
     try {
@@ -482,6 +487,39 @@ class DatabaseManager {
     } catch (err) {
       console.error('[Pterodactyl Database] Error syncing state to MySQL:', err);
     }
+  }
+
+  private triggerDebouncedMysqlSync() {
+    if (!this.mysqlPool || !this.isMysqlConnected) return;
+    if (this.mysqlSyncTimer) return; // already scheduled
+    this.mysqlSyncTimer = setTimeout(() => {
+      this.mysqlSyncTimer = null;
+      this.syncToMysql().catch(() => {});
+    }, 400);
+  }
+
+  private triggerDebouncedFileWrite() {
+    if (this.saveTimer) return; // write already scheduled
+    this.saveTimer = setTimeout(async () => {
+      this.saveTimer = null;
+      if (this.isSavingFile) {
+        this.pendingFileWrite = true;
+        return;
+      }
+      this.isSavingFile = true;
+      try {
+        const json = JSON.stringify(this.data);
+        await fs.promises.writeFile(DB_FILE, json, 'utf-8');
+      } catch (err) {
+        console.error('Failed to write database file asynchronously:', err);
+      } finally {
+        this.isSavingFile = false;
+        if (this.pendingFileWrite) {
+          this.pendingFileWrite = false;
+          this.triggerDebouncedFileWrite();
+        }
+      }
+    }, 50);
   }
 
   private load(): DatabaseSchema {
@@ -519,12 +557,21 @@ class DatabaseManager {
     if (dataToSave) {
       this.data = dataToSave;
     }
+    // High-performance asynchronous non-blocking write
+    this.triggerDebouncedFileWrite();
+    this.triggerDebouncedMysqlSync();
+  }
+
+  public flushSync() {
     try {
-      fs.writeFileSync(DB_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
-    } catch (err) {
-      console.error('Failed to write database file:', err);
+      if (this.saveTimer) {
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+      }
+      fs.writeFileSync(DB_FILE, JSON.stringify(this.data), 'utf-8');
+    } catch (e) {
+      console.error('Error during flushSync:', e);
     }
-    this.syncToMysql().catch(() => {});
   }
 
   public get(): DatabaseSchema {
@@ -556,3 +603,14 @@ class DatabaseManager {
 }
 
 export const db = new DatabaseManager();
+
+// Ensure pending writes are flushed on server shutdown
+process.on('SIGINT', () => {
+  db.flushSync();
+});
+process.on('SIGTERM', () => {
+  db.flushSync();
+});
+process.on('beforeExit', () => {
+  db.flushSync();
+});
