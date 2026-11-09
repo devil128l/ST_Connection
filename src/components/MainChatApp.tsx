@@ -165,6 +165,17 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
           break;
         }
 
+        case 'message_deleted_me': {
+          const { messageId, chatId } = payload;
+          if (selectedChatRef.current && (!chatId || selectedChatRef.current.id === chatId)) {
+            setMessages(prev => prev.filter(m => m.id !== messageId));
+          }
+          if (chatId && chatMessagesCacheRef.current[chatId]) {
+            chatMessagesCacheRef.current[chatId] = chatMessagesCacheRef.current[chatId].filter(m => m.id !== messageId);
+          }
+          break;
+        }
+
         case 'typing_status': {
           const { chatId, isTyping } = payload;
           if (selectedChatRef.current && selectedChatRef.current.id === chatId) {
@@ -387,6 +398,74 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
       }
     }).catch(e => {
       console.error('Failed to send message to server:', e);
+    });
+  };
+
+  const handleDeleteMessage = (messageId: string, type: 'everyone' | 'me') => {
+    if (!selectedChat) return;
+    const chatId = selectedChat.id;
+
+    // Instant optimistic update (0ms delay)
+    if (type === 'me') {
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      if (chatMessagesCacheRef.current[chatId]) {
+        chatMessagesCacheRef.current[chatId] = chatMessagesCacheRef.current[chatId].filter(m => m.id !== messageId);
+      }
+    } else {
+      setMessages(prev => prev.map(m => {
+        if (m.id === messageId) {
+          return {
+            ...m,
+            isDeletedForEveryone: true,
+            content: 'This message was deleted',
+            mediaUrl: undefined,
+            reactions: [],
+            type: 'text',
+          };
+        }
+        return m;
+      }));
+      if (chatMessagesCacheRef.current[chatId]) {
+        chatMessagesCacheRef.current[chatId] = chatMessagesCacheRef.current[chatId].map(m => {
+          if (m.id === messageId) {
+            return {
+              ...m,
+              isDeletedForEveryone: true,
+              content: 'This message was deleted',
+              mediaUrl: undefined,
+              reactions: [],
+              type: 'text',
+            };
+          }
+          return m;
+        });
+      }
+    }
+
+    // Call API asynchronously in background
+    api.deleteMessage(messageId, type).catch(err => {
+      console.error('Failed to delete message:', err);
+    });
+  };
+
+  const handleClearChat = async (chatId: string) => {
+    // 0ms instant local clear
+    setMessages([]);
+    if (chatMessagesCacheRef.current[chatId]) {
+      chatMessagesCacheRef.current[chatId] = [];
+    }
+    setChats(prev => prev.map(c => {
+      if (c.id === chatId) {
+        return {
+          ...c,
+          lastMessage: undefined,
+        };
+      }
+      return c;
+    }));
+
+    api.clearChat(chatId).catch(err => {
+      console.error('Failed to clear chat:', err);
     });
   };
 
@@ -892,6 +971,8 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
                   onSendMessage={handleSendMessage}
                   onStartCall={handleStartCall}
                   onRefreshMessages={() => loadMessages(selectedChat.id)}
+                  onDeleteMessage={handleDeleteMessage}
+                  onClearChat={() => handleClearChat(selectedChat.id)}
                   wallpaperId={wallpaper}
                   isTyping={partnerTyping}
                   onTypingChange={(typing) => {

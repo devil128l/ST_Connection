@@ -405,6 +405,18 @@ class ApiService {
     });
   }
 
+  async clearChat(chatId: string) {
+    return this.request<{ success: boolean; message: string }>(`/api/chats/${chatId}/clear`, {
+      method: 'POST',
+    });
+  }
+
+  async deleteChat(chatId: string) {
+    return this.request<{ success: boolean; message: string }>(`/api/chats/${chatId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Stories
   async getStories() {
     return this.request<{ stories: Story[] }>('/api/stories');

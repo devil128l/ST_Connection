@@ -1687,6 +1687,7 @@ app.delete('/api/messages/:id', (req: Request, res: Response) => {
 
   let targetChat: Chat | null = null;
   let updatedMessage: Message | null = null;
+  let deletedForEveryone = false;
 
   db.update(d => {
     const msg = d.messages.find(m => m.id === id);
@@ -1696,7 +1697,17 @@ app.delete('/api/messages/:id', (req: Request, res: Response) => {
         if (msg.senderId === userId || (targetChat && targetChat.adminIds?.includes(userId))) {
           msg.isDeletedForEveryone = true;
           msg.content = 'This message was deleted';
+          msg.mediaUrl = undefined;
+          msg.fileName = undefined;
+          msg.fileSize = undefined;
+          msg.audioDuration = undefined;
+          msg.reactions = [];
           updatedMessage = msg;
+          deletedForEveryone = true;
+
+          if (targetChat && targetChat.lastMessage) {
+            targetChat.lastMessage.content = 'This message was deleted';
+          }
         }
       } else {
         if (!msg.deletedFor) msg.deletedFor = [];
@@ -1708,16 +1719,69 @@ app.delete('/api/messages/:id', (req: Request, res: Response) => {
     }
   });
 
-  if (type === 'everyone' && updatedMessage && targetChat) {
+  if (deletedForEveryone && updatedMessage && targetChat) {
     (targetChat as Chat).participantIds.forEach(pId => {
       broadcastToUser(pId, {
         type: 'message_updated',
         payload: { message: updatedMessage },
       });
     });
+  } else if (type === 'me') {
+    broadcastToUser(userId, {
+      type: 'message_deleted_me',
+      payload: { messageId: id, chatId: targetChat ? (targetChat as Chat).id : undefined },
+    });
   }
 
-  return res.json({ success: true, message: 'Message deleted' });
+  return res.json({ success: true, message: 'Message deleted', messageId: id, type });
+});
+
+// Clear all messages in a chat for current user
+app.post('/api/chats/:id/clear', (req: Request, res: Response) => {
+  const userId = getAuthUserId(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { id } = req.params;
+  db.update(d => {
+    d.messages.forEach(m => {
+      if (m.chatId === id) {
+        if (!m.deletedFor) m.deletedFor = [];
+        if (!m.deletedFor.includes(userId)) {
+          m.deletedFor.push(userId);
+        }
+      }
+    });
+  });
+
+  return res.json({ success: true, message: 'Chat history cleared' });
+});
+
+// Delete chat conversation
+app.delete('/api/chats/:id', (req: Request, res: Response) => {
+  const userId = getAuthUserId(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { id } = req.params;
+  db.update(d => {
+    d.messages.forEach(m => {
+      if (m.chatId === id) {
+        if (!m.deletedFor) m.deletedFor = [];
+        if (!m.deletedFor.includes(userId)) {
+          m.deletedFor.push(userId);
+        }
+      }
+    });
+    const c = d.chats.find(ch => ch.id === id);
+    if (c) {
+      if (c.type === 'direct') {
+        d.chats = d.chats.filter(ch => ch.id !== id);
+      } else {
+        c.participantIds = c.participantIds.filter(p => p !== userId);
+      }
+    }
+  });
+
+  return res.json({ success: true, message: 'Chat deleted' });
 });
 
 // ==========================================

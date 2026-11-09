@@ -45,6 +45,8 @@ interface ChatScreenProps {
   onSendMessage: (content: string, type?: 'text' | 'image' | 'file' | 'audio', mediaUrl?: string, replyToId?: string, audioDuration?: number) => void;
   onStartCall: (type: 'voice' | 'video') => void;
   onRefreshMessages: () => void;
+  onDeleteMessage?: (messageId: string, type: 'everyone' | 'me') => void;
+  onClearChat?: () => void;
   wallpaperId?: string;
   isTyping?: boolean;
   onTypingChange?: (isTyping: boolean) => void;
@@ -60,6 +62,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
   onSendMessage,
   onStartCall,
   onRefreshMessages,
+  onDeleteMessage,
+  onClearChat,
   wallpaperId = 'default',
   isTyping = false,
   onTypingChange,
@@ -75,6 +79,11 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [loadingAi, setLoadingAi] = useState(false);
   const [aiModalResult, setAiModalResult] = useState<{ title: string; content: string } | null>(null);
+
+  // Message deletion & chat clearing modals
+  const [deleteModalMsg, setDeleteModalMsg] = useState<{ id: string; content: string; isMe: boolean } | null>(null);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Audio voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -363,12 +372,26 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
     }
   };
 
-  const handleDelete = async (messageId: string, type: 'everyone' | 'me') => {
-    try {
-      await api.deleteMessage(messageId, type);
+  const confirmDelete = (msg: Message, isMe: boolean) => {
+    setDeleteModalMsg({
+      id: msg.id,
+      content: msg.content || (msg.type === 'audio' ? '🎤 Voice message' : '📷 Attachment'),
+      isMe,
+    });
+  };
+
+  const executeDelete = (type: 'everyone' | 'me') => {
+    if (!deleteModalMsg) return;
+    const msgId = deleteModalMsg.id;
+    setDeleteModalMsg(null);
+
+    if (onDeleteMessage) {
+      onDeleteMessage(msgId, type);
+    } else {
+      api.deleteMessage(msgId, type).catch(err => {
+        console.error('Failed to delete message:', err);
+      });
       onRefreshMessages();
-    } catch (e) {
-      console.error(e);
     }
   };
 
@@ -493,6 +516,59 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
           >
             <Video className="w-4 h-4" />
           </button>
+
+          {/* Header More Menu Dropdown */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowHeaderMenu(!showHeaderMenu)}
+              className={`p-2 rounded-lg transition cursor-pointer ${
+                showHeaderMenu ? 'bg-[#202c33] text-white' : 'hover:bg-[#202c33] text-slate-300'
+              }`}
+              title="More options"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+
+            {showHeaderMenu && (
+              <div className="absolute right-0 top-full mt-1.5 w-48 bg-[#202c33] border border-[#2a3942] rounded-xl shadow-2xl py-1 z-30 animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSearch(true);
+                    setShowHeaderMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-[#111b21] flex items-center gap-2.5 cursor-pointer transition"
+                >
+                  <Search className="w-3.5 h-3.5 text-slate-400" /> Search Messages
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowClearConfirm(true);
+                    setShowHeaderMenu(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-xs text-rose-400 hover:bg-rose-950/40 flex items-center gap-2.5 cursor-pointer transition"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" /> Clear Chat History
+                </button>
+
+                {onBack && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowHeaderMenu(false);
+                      onBack();
+                    }}
+                    className="w-full px-3 py-2 text-left text-xs text-slate-400 hover:bg-[#111b21] flex items-center gap-2.5 cursor-pointer transition border-t border-[#2a3942]"
+                  >
+                    <X className="w-3.5 h-3.5" /> Close Chat
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           {onBack && (
             <button
@@ -620,74 +696,76 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
               id={`msg-${msg.id}`}
               className={`w-full flex flex-col ${isMe ? 'items-end justify-end' : 'items-start justify-start'} group relative`}
             >
-              {/* Context Action Toolbar on Hover */}
-              <div
-                className={`opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute -top-8 ${
-                  isMe ? 'right-2' : 'left-2'
-                } z-10 flex items-center gap-1 bg-[#182229] border border-[#2a3942] rounded-lg p-1 shadow-lg`}
-              >
-                {/* Quick Emoji Reaction buttons */}
-                {['👍', '❤️', '🔥'].map(em => (
-                  <button
-                    key={em}
-                    type="button"
-                    onClick={() => handleReact(msg.id, em)}
-                    className="p-1 hover:bg-[#202c33] rounded text-xs transition"
-                  >
-                    {em}
-                  </button>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={() => setReplyingTo(msg)}
-                  className="p-1 hover:bg-[#202c33] rounded text-slate-400 hover:text-white transition"
-                  title="Reply"
+              {/* Context Action Toolbar on Hover (hidden if message was deleted) */}
+              {!msg.isDeletedForEveryone && (
+                <div
+                  className={`opacity-0 group-hover:opacity-100 transition-opacity duration-150 absolute -top-8 ${
+                    isMe ? 'right-2' : 'left-2'
+                  } z-10 flex items-center gap-1 bg-[#182229] border border-[#2a3942] rounded-lg p-1 shadow-lg`}
                 >
-                  <Reply className="w-3.5 h-3.5" />
-                </button>
+                  {/* Quick Emoji Reaction buttons */}
+                  {['👍', '❤️', '🔥'].map(em => (
+                    <button
+                      key={em}
+                      type="button"
+                      onClick={() => handleReact(msg.id, em)}
+                      className="p-1 hover:bg-[#202c33] rounded text-xs transition"
+                    >
+                      {em}
+                    </button>
+                  ))}
 
-                <button
-                  type="button"
-                  onClick={() => handleStar(msg.id)}
-                  className="p-1 hover:bg-[#202c33] rounded text-slate-400 hover:text-amber-400 transition"
-                  title="Star message"
-                >
-                  <Star className={`w-3.5 h-3.5 ${isStarred ? 'fill-amber-400 text-amber-400' : ''}`} />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handlePin(msg.id)}
-                  className="p-1 hover:bg-[#202c33] rounded text-slate-400 hover:text-emerald-400 transition"
-                  title="Pin message"
-                >
-                  <Pin className="w-3.5 h-3.5" />
-                </button>
-
-                {isMe && msg.type === 'text' && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setEditingMessage(msg);
-                      setInputText(msg.content);
-                    }}
+                    onClick={() => setReplyingTo(msg)}
                     className="p-1 hover:bg-[#202c33] rounded text-slate-400 hover:text-white transition"
-                    title="Edit message"
+                    title="Reply"
                   >
-                    <Edit2 className="w-3.5 h-3.5" />
+                    <Reply className="w-3.5 h-3.5" />
                   </button>
-                )}
 
-                <button
-                  type="button"
-                  onClick={() => handleDelete(msg.id, isMe ? 'everyone' : 'me')}
-                  className="p-1 hover:bg-rose-950/60 rounded text-slate-400 hover:text-rose-400 transition"
-                  title={isMe ? 'Delete for everyone' : 'Delete for me'}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => handleStar(msg.id)}
+                    className="p-1 hover:bg-[#202c33] rounded text-slate-400 hover:text-amber-400 transition"
+                    title="Star message"
+                  >
+                    <Star className={`w-3.5 h-3.5 ${isStarred ? 'fill-amber-400 text-amber-400' : ''}`} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handlePin(msg.id)}
+                    className="p-1 hover:bg-[#202c33] rounded text-slate-400 hover:text-emerald-400 transition"
+                    title="Pin message"
+                  >
+                    <Pin className="w-3.5 h-3.5" />
+                  </button>
+
+                  {isMe && msg.type === 'text' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingMessage(msg);
+                        setInputText(msg.content);
+                      }}
+                      className="p-1 hover:bg-[#202c33] rounded text-slate-400 hover:text-white transition"
+                      title="Edit message"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => confirmDelete(msg, isMe)}
+                    className="p-1 hover:bg-rose-950/60 rounded text-slate-400 hover:text-rose-400 transition cursor-pointer"
+                    title={isMe ? 'Delete for everyone / for me' : 'Delete for me'}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
 
               {/* Message Bubble Container */}
               <div
@@ -697,80 +775,105 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                     : 'self-start mr-auto bg-[#202c33] text-slate-100 rounded-tl-none border border-[#2a3942]'
                 }`}
               >
-                {/* Sender name for group chats */}
-                {!isMe && chat.type === 'group' && (
-                  <p className="text-[11px] font-semibold text-emerald-400 mb-0.5">
-                    {msg.senderName}
-                  </p>
-                )}
-
-                {/* Quoted Reply Preview */}
-                {msg.replyTo && (
-                  <div className="mb-2 p-2 rounded-lg bg-black/20 border-l-2 border-emerald-400 text-xs text-slate-300">
-                    <p className="font-semibold text-[10px] text-emerald-300">{msg.replyTo.senderName}</p>
-                    <p className="truncate text-[11px]">{msg.replyTo.content}</p>
+                {/* Message content or deleted placeholder */}
+                {msg.isDeletedForEveryone ? (
+                  <div className="flex items-center gap-2 py-1 text-slate-300/70 italic text-xs select-none">
+                    <span className="text-sm">🚫</span>
+                    <span>This message was deleted</span>
                   </div>
+                ) : (
+                  <>
+                    {/* Sender name for group chats */}
+                    {!isMe && chat.type === 'group' && (
+                      <p className="text-[11px] font-semibold text-emerald-400 mb-0.5">
+                        {msg.senderName}
+                      </p>
+                    )}
+
+                    {/* Quoted Reply Preview */}
+                    {msg.replyTo && (
+                      <div className="mb-2 p-2 rounded-lg bg-black/20 border-l-2 border-emerald-400 text-xs text-slate-300">
+                        <p className="font-semibold text-[10px] text-emerald-300">{msg.replyTo.senderName}</p>
+                        <p className="truncate text-[11px]">{msg.replyTo.content}</p>
+                      </div>
+                    )}
+
+                    {/* 1. Text Message */}
+                    {msg.type === 'text' && (
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                        {msg.content}
+                      </p>
+                    )}
+
+                    {/* 2. Image Attachment */}
+                    {msg.type === 'image' && msg.mediaUrl && (
+                      <div className="rounded-xl overflow-hidden mb-1 max-h-72 bg-black">
+                        <img
+                          src={msg.mediaUrl}
+                          alt="attachment"
+                          className="w-full h-full object-cover cursor-pointer hover:opacity-95"
+                          onClick={() => window.open(msg.mediaUrl, '_blank')}
+                        />
+                      </div>
+                    )}
+
+                    {/* 3. Audio Voice Note with Interactive Waveform */}
+                    {msg.type === 'audio' && (
+                      <div className="flex items-center gap-3 py-1 min-w-[220px]">
+                        <button
+                          type="button"
+                          onClick={() => togglePlayAudio(msg.id, msg.audioDuration || 6)}
+                          className="w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black flex items-center justify-center shrink-0 transition cursor-pointer shadow"
+                        >
+                          {playingAudioId === msg.id ? <Pause className="w-4 h-4 fill-black" /> : <Play className="w-4 h-4 fill-black ml-0.5" />}
+                        </button>
+
+                        {/* Waveform bars */}
+                        <div className="flex-1 flex items-center gap-0.5 h-6">
+                          {[40, 70, 30, 90, 60, 45, 85, 30, 60, 95, 40, 75, 50, 80, 35].map((height, idx) => {
+                            const activePct = audioProgress[msg.id] || 0;
+                            const isBarActive = (idx / 15) * 100 <= activePct;
+                            return (
+                              <div
+                                key={idx}
+                                className={`w-1 rounded-full transition-all duration-100 ${
+                                  isBarActive ? 'bg-emerald-400' : 'bg-slate-400/50'
+                                }`}
+                                style={{ height: `${height}%` }}
+                              />
+                            );
+                          })}
+                        </div>
+
+                        <span className="text-[10px] text-slate-300 font-mono shrink-0">
+                          0:0{msg.audioDuration || 4}
+                        </span>
+                      </div>
+                    )}
+                  </>
                 )}
 
-                {/* 1. Text Message */}
-                {msg.type === 'text' && (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                    {msg.content}
-                  </p>
-                )}
-
-                {/* 2. Image Attachment */}
-                {msg.type === 'image' && msg.mediaUrl && (
-                  <div className="rounded-xl overflow-hidden mb-1 max-h-72 bg-black">
-                    <img
-                      src={msg.mediaUrl}
-                      alt="attachment"
-                      className="w-full h-full object-cover cursor-pointer hover:opacity-95"
-                      onClick={() => window.open(msg.mediaUrl, '_blank')}
-                    />
-                  </div>
-                )}
-
-                {/* 3. Audio Voice Note with Interactive Waveform */}
-                {msg.type === 'audio' && (
-                  <div className="flex items-center gap-3 py-1 min-w-[220px]">
-                    <button
-                      type="button"
-                      onClick={() => togglePlayAudio(msg.id, msg.audioDuration || 6)}
-                      className="w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black flex items-center justify-center shrink-0 transition cursor-pointer shadow"
-                    >
-                      {playingAudioId === msg.id ? <Pause className="w-4 h-4 fill-black" /> : <Play className="w-4 h-4 fill-black ml-0.5" />}
-                    </button>
-
-                    {/* Waveform bars */}
-                    <div className="flex-1 flex items-center gap-0.5 h-6">
-                      {[40, 70, 30, 90, 60, 45, 85, 30, 60, 95, 40, 75, 50, 80, 35].map((height, idx) => {
-                        const activePct = audioProgress[msg.id] || 0;
-                        const isBarActive = (idx / 15) * 100 <= activePct;
-                        return (
-                          <div
-                            key={idx}
-                            className={`w-1 rounded-full transition-all duration-100 ${
-                              isBarActive ? 'bg-emerald-400' : 'bg-slate-400/50'
-                            }`}
-                            style={{ height: `${height}%` }}
-                          />
-                        );
-                      })}
-                    </div>
-
-                    <span className="text-[10px] text-slate-300 font-mono shrink-0">
-                      0:0{msg.audioDuration || 4}
-                    </span>
-                  </div>
-                )}
-
-                {/* Metadata row: time, edited tag, star, status */}
+                {/* Metadata row: time, edited tag, star, delete icon, status */}
                 <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-slate-300/80">
                   {isStarred && <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />}
                   {msg.isPinned && <Pin className="w-2.5 h-2.5 text-emerald-300" />}
                   {msg.isEdited && <span className="italic text-[9px]">(edited)</span>}
                   <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+
+                  {/* Fast delete button directly on message */}
+                  {!msg.isDeletedForEveryone && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmDelete(msg, isMe);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-400 text-slate-400/70 transition ml-1 p-0.5 cursor-pointer"
+                      title="Delete message"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </button>
+                  )}
 
                   {isMe && (
                     <span>
@@ -1129,6 +1232,103 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Message Confirmation Dialog */}
+      {deleteModalMsg && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[#1f2c34] border border-[#2a3942] rounded-2xl p-5 max-w-sm w-full shadow-2xl text-slate-200 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white text-base">Delete message?</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {deleteModalMsg.isMe 
+                    ? 'Delete this message for everyone or just for yourself?' 
+                    : 'This message will be deleted from your view.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-[#111b21] p-3 rounded-xl border border-[#2a3942] text-xs text-slate-300 italic mb-4 max-h-20 overflow-y-auto break-words">
+              "{deleteModalMsg.content}"
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {deleteModalMsg.isMe && (
+                <button
+                  type="button"
+                  onClick={() => executeDelete('everyone')}
+                  className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete for everyone
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => executeDelete('me')}
+                className="w-full py-2.5 px-4 rounded-xl bg-[#2a3942] hover:bg-[#374248] text-slate-200 font-medium text-xs transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                Delete for me
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDeleteModalMsg(null)}
+                className="w-full py-2 rounded-xl text-slate-400 hover:text-white font-medium text-xs transition cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Chat Confirmation Dialog */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-[#1f2c34] border border-[#2a3942] rounded-2xl p-5 max-w-sm w-full shadow-2xl text-slate-200 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white text-base">Clear conversation?</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  All messages in this chat will be cleared from your view.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowClearConfirm(false);
+                  if (onClearChat) {
+                    onClearChat();
+                  } else {
+                    api.clearChat(chat.id).then(() => onRefreshMessages());
+                  }
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs transition cursor-pointer flex items-center justify-center gap-2 shadow"
+              >
+                <Trash2 className="w-4 h-4" /> Clear All Messages
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowClearConfirm(false)}
+                className="w-full py-2 rounded-xl text-slate-400 hover:text-white font-medium text-xs transition cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
