@@ -26,6 +26,7 @@ export interface User {
   resetPasswordToken?: string;
   resetPasswordExpires?: number;
   customStatus?: string;
+  chatWallpaper?: string;
   createdAt: string;
 }
 
@@ -110,6 +111,15 @@ export interface ChannelPost {
   createdAt: string;
 }
 
+export interface StorySong {
+  id: string;
+  title: string;
+  artist: string;
+  audioUrl?: string;
+  albumArt?: string;
+  duration?: number;
+}
+
 export interface Story {
   id: string;
   userId: string;
@@ -120,6 +130,7 @@ export interface Story {
   backgroundColor?: string;
   fontStyle?: string;
   mediaUrl?: string;
+  song?: StorySong;
   viewers: { userId: string; username: string; viewedAt: string }[];
   expiresAt: number;
   createdAt: string;
@@ -240,12 +251,18 @@ export function generateSalt(): string {
   return crypto.randomBytes(16).toString('hex');
 }
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+export const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.resolve(process.cwd(), 'data');
+export const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 
-// Ensure data folder exists
+// Ensure data & uploads folders exist on VPS
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
 function getDefaultDatabase(): DatabaseSchema {
@@ -590,14 +607,52 @@ class DatabaseManager {
     return this.data;
   }
 
-  public getDatabaseInfo() {
+  public getVpsStorageStats() {
+    let databaseSizeBytes = 0;
+    let uploadsCount = 0;
+    let uploadsSizeBytes = 0;
+
+    try {
+      if (fs.existsSync(DB_FILE)) {
+        databaseSizeBytes = fs.statSync(DB_FILE).size;
+      }
+    } catch {}
+
+    try {
+      if (fs.existsSync(UPLOADS_DIR)) {
+        const files = fs.readdirSync(UPLOADS_DIR);
+        for (const f of files) {
+          try {
+            const st = fs.statSync(path.join(UPLOADS_DIR, f));
+            if (st.isFile()) {
+              uploadsCount++;
+              uploadsSizeBytes += st.size;
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+
     return {
-      type: this.isMysqlConnected ? 'Pterodactyl MySQL / MariaDB' : 'Local Persistent JSON Database',
+      dataDir: DATA_DIR,
+      uploadsDir: UPLOADS_DIR,
+      databaseSizeBytes,
+      uploadsCount,
+      uploadsSizeBytes,
+      totalVpsBytes: databaseSizeBytes + uploadsSizeBytes,
+    };
+  }
+
+  public getDatabaseInfo() {
+    const vpsStats = this.getVpsStorageStats();
+    return {
+      type: this.isMysqlConnected ? 'Pterodactyl MySQL + VPS Disk Media' : 'VPS Persistent Storage (JSON + Disk Media)',
       connected: this.isMysqlConnected,
-      host: this.mysqlConfig?.host || (process.env.DB_HOST ? `${process.env.DB_HOST}:${process.env.DB_PORT || 3306}` : 'localhost (local storage)'),
-      database: this.mysqlConfig?.database || process.env.DB_NAME || 'data/database.json',
-      user: this.mysqlConfig?.user || process.env.DB_USER || 'local',
+      host: this.mysqlConfig?.host || (process.env.DB_HOST ? `${process.env.DB_HOST}:${process.env.DB_PORT || 3306}` : 'localhost (VPS disk)'),
+      database: this.mysqlConfig?.database || process.env.DB_NAME || DB_FILE,
+      user: this.mysqlConfig?.user || process.env.DB_USER || 'vps-local',
       error: this.mysqlError,
+      vpsStorage: vpsStats,
     };
   }
 }

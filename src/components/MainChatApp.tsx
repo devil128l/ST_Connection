@@ -37,9 +37,11 @@ import { ChannelsView } from './ChannelsView.js';
 import { ContactsView } from './ContactsView.js';
 import { SettingsView } from './SettingsView.js';
 import { CallModal } from './CallModal.js';
+import { VerifiedBadge } from './VerifiedBadge.js';
 
 interface MainChatAppProps {
   currentUser: SafeUser;
+  onUpdateUser?: (user: SafeUser) => void;
   onLogout: () => void;
   onSwitchToAdmin: () => void;
   siteName?: string;
@@ -48,6 +50,7 @@ interface MainChatAppProps {
 
 export const MainChatApp: React.FC<MainChatAppProps> = ({
   currentUser,
+  onUpdateUser,
   onLogout,
   onSwitchToAdmin,
   siteName = 'ST CONNECTION',
@@ -63,7 +66,16 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
   const [channels, setChannels] = useState<Channel[]>([]);
   const [calls, setCalls] = useState<CallRecord[]>([]);
   const [chatSearch, setChatSearch] = useState('');
-  const [wallpaper, setWallpaper] = useState(localStorage.getItem('st_chat_wallpaper') || 'default');
+  const [wallpaper, setWallpaper] = useState(
+    currentUser.chatWallpaper || localStorage.getItem('st_chat_wallpaper') || 'default'
+  );
+
+  useEffect(() => {
+    if (currentUser.chatWallpaper && currentUser.chatWallpaper !== wallpaper) {
+      setWallpaper(currentUser.chatWallpaper);
+      localStorage.setItem('st_chat_wallpaper', currentUser.chatWallpaper);
+    }
+  }, [currentUser.chatWallpaper]);
 
   // New Group / Chat Modal
   const [showNewChatModal, setShowNewChatModal] = useState(false);
@@ -74,8 +86,21 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
   // In-memory messages cache per chatId for instant (0ms) chat switches
   const chatMessagesCacheRef = useRef<Record<string, Message[]>>({});
 
-  // WebRTC Call session
+  // WebRTC Call session & pending offer reference
   const [activeCallSession, setActiveCallSession] = useState<CallSession | null>(null);
+  const pendingOfferRef = useRef<{ fromUserId: string; sdp: RTCSessionDescriptionInit; callType: 'voice' | 'video'; callId: string } | null>(null);
+
+  // Wire WebRTC manager signals to WebSocket
+  useEffect(() => {
+    webrtc.setCallbacks((targetUserId, signalData, callType, callId) => {
+      api.sendWs('webrtc_signal', {
+        targetUserId,
+        signalData,
+        callType,
+        callId,
+      });
+    });
+  }, []);
 
   // Typing status indicator in chat
   const [partnerTyping, setPartnerTyping] = useState(false);
@@ -191,19 +216,32 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
 
         case 'webrtc_signal': {
           const { fromUserId, signalData, callType, callId } = payload;
-          if (signalData?.type === 'incoming_call') {
-            // Callee receives call
+          if (!signalData) break;
+
+          if (signalData.type === 'offer' || signalData.type === 'incoming_call') {
             const callerUser = directoryUsers.find(u => u.id === fromUserId) || {
               displayName: 'Contact',
               avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
             };
 
+            const cId = callId || signalData.callId || `call_${Date.now()}`;
+            const cType = callType || signalData.callType || 'voice';
+
+            if (signalData.sdp) {
+              pendingOfferRef.current = {
+                fromUserId,
+                sdp: signalData.sdp,
+                callType: cType,
+                callId: cId,
+              };
+            }
+
             setActiveCallSession({
-              callId: callId || `call_${Date.now()}`,
+              callId: cId,
               targetUserId: fromUserId,
               targetUserName: callerUser.displayName,
               targetUserAvatar: callerUser.avatar,
-              type: callType || 'voice',
+              type: cType,
               isIncoming: true,
               status: 'ringing',
               isMuted: false,
@@ -211,11 +249,26 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
               facingMode: 'user',
               durationSeconds: 0,
             });
-          } else if (signalData?.type === 'call_accepted') {
-            setActiveCallSession(prev => prev ? { ...prev, status: 'connected' } : null);
-          } else if (signalData?.type === 'call_ended' || signalData?.type === 'call_rejected') {
+          } else if (signalData.type === 'answer') {
+            if (signalData.sdp) {
+              webrtc.handleCallAnswer(signalData.sdp).catch(console.warn);
+            }
+            setActiveCallSession(prev => (prev ? { ...prev, status: 'connected' } : null));
+          } else if (signalData.type === 'candidate') {
+            if (signalData.candidate) {
+              webrtc.handleIceCandidate(signalData.candidate).catch(console.warn);
+            }
+          } else if (signalData.type === 'call_accepted') {
+            setActiveCallSession(prev => (prev ? { ...prev, status: 'connected' } : null));
+          } else if (
+            signalData.type === 'hangup' ||
+            signalData.type === 'reject' ||
+            signalData.type === 'call_ended' ||
+            signalData.type === 'call_rejected'
+          ) {
             sounds.playHangup();
             webrtc.stopLocalMedia();
+            pendingOfferRef.current = null;
             setActiveCallSession(null);
           }
           break;
@@ -473,13 +526,16 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
     if (!selectedChat) return;
     const target = selectedChat.otherParticipant || {
       id: selectedChat.id,
-      displayName: selectedChat.name || 'Group Member',
+      displayName: selectedChat.name || 'Contact',
       avatar: selectedChat.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
     };
 
     const callId = `call_${Date.now()}`;
+
+    // 1. Request local media stream (mic/camera)
     await webrtc.startLocalMedia(type);
 
+    // 2. Set active call session in UI
     setActiveCallSession({
       callId,
       targetUserId: target.id,
@@ -494,46 +550,48 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
       durationSeconds: 0,
     });
 
-    // Notify recipient over WebSocket
-    api.sendWs('webrtc_signal', {
-      targetUserId: target.id,
-      callType: type,
-      callId,
-      signalData: { type: 'incoming_call' },
-    });
+    // 3. Create WebRTC offer with STUN servers and send via WebSocket
+    await webrtc.createCallOffer(target.id, type, callId);
   };
 
   const handleAcceptCall = async () => {
     if (!activeCallSession) return;
-    await webrtc.startLocalMedia(activeCallSession.type);
-    setActiveCallSession(prev => prev ? { ...prev, status: 'connected' } : null);
+    const { targetUserId, type, callId } = activeCallSession;
+
+    // 1. Request local media stream
+    await webrtc.startLocalMedia(type);
+
+    // 2. Process incoming offer and create answer
+    if (pendingOfferRef.current && pendingOfferRef.current.sdp) {
+      await webrtc.handleCallOffer(
+        targetUserId,
+        pendingOfferRef.current.sdp,
+        type,
+        callId
+      );
+      pendingOfferRef.current = null;
+    }
+
+    setActiveCallSession(prev => (prev ? { ...prev, status: 'connected' } : null));
 
     api.sendWs('webrtc_signal', {
-      targetUserId: activeCallSession.targetUserId,
-      callType: activeCallSession.type,
-      callId: activeCallSession.callId,
+      targetUserId,
+      callType: type,
+      callId,
       signalData: { type: 'call_accepted' },
     });
   };
 
   const handleRejectCall = () => {
     if (!activeCallSession) return;
-    api.sendWs('webrtc_signal', {
-      targetUserId: activeCallSession.targetUserId,
-      callId: activeCallSession.callId,
-      signalData: { type: 'call_rejected' },
-    });
-    webrtc.stopLocalMedia();
+    webrtc.rejectCall(activeCallSession.targetUserId, activeCallSession.callId);
+    pendingOfferRef.current = null;
     setActiveCallSession(null);
   };
 
   const handleEndCall = () => {
     if (!activeCallSession) return;
-    api.sendWs('webrtc_signal', {
-      targetUserId: activeCallSession.targetUserId,
-      callId: activeCallSession.callId,
-      signalData: { type: 'call_ended' },
-    });
+    webrtc.endCall(activeCallSession.targetUserId, activeCallSession.callId);
 
     // Log call record
     api.logCall({
@@ -543,7 +601,7 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
       durationSeconds: activeCallSession.durationSeconds,
     }).catch(() => {});
 
-    webrtc.stopLocalMedia();
+    pendingOfferRef.current = null;
     setActiveCallSession(null);
     loadAllData();
   };
@@ -646,9 +704,7 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
             <div className="flex items-center gap-1">
               <span className="text-xs font-semibold text-white max-w-[100px] truncate">{currentUser.displayName}</span>
               {currentUser.verified && (
-                <span title="Verified Blue Tick">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                </span>
+                <VerifiedBadge size="sm" title="Meta Verified Blue Tick" />
               )}
               {currentUser.developer && (
                 <span className="px-1 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[9px] font-bold font-mono">
@@ -926,9 +982,7 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
                                 {isDirect ? target.displayName : chat.name}
                               </h4>
                               {target.verified && (
-                                <span title="Verified Account">
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-sky-400 shrink-0 fill-sky-400/20" />
-                                </span>
+                                <VerifiedBadge size="sm" title="Meta Verified Account" />
                               )}
                               {target.developer && (
                                 <span
@@ -1071,7 +1125,10 @@ export const MainChatApp: React.FC<MainChatAppProps> = ({
           <div className="flex-1 h-full">
             <SettingsView
               currentUser={currentUser}
-              onUpdateUser={(updated) => {}}
+              onUpdateUser={(updated) => {
+                api.updateCurrentUser(updated);
+                if (onUpdateUser) onUpdateUser(updated);
+              }}
               onLogout={onLogout}
               selectedWallpaper={wallpaper}
               onSelectWallpaper={setWallpaper}

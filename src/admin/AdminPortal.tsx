@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { api } from '../utils/api.js';
 import { SafeUser, SystemSettings } from '../types.js';
+import { VerifiedBadge } from '../components/VerifiedBadge.js';
 
 interface AdminPortalProps {
   onSwitchToMainSite: () => void;
@@ -803,8 +804,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
                         onChange={(e) => setGiveBlueTick(e.target.checked)}
                         className="rounded accent-sky-500 w-4 h-4"
                       />
-                      <span className="flex items-center gap-1 font-medium text-sky-400">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Blue Tick
+                      <span className="flex items-center gap-1.5 font-medium text-sky-400">
+                        <VerifiedBadge size="sm" /> Blue Tick
                       </span>
                     </label>
 
@@ -859,9 +860,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
                                 <div className="flex items-center gap-1.5">
                                   <p className="font-semibold text-white">{u.displayName}</p>
                                   {u.verified && (
-                                    <span title="Verified Blue Tick">
-                                      <CheckCircle2 className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                                    </span>
+                                    <VerifiedBadge size="sm" title="Meta Verified Blue Tick" />
                                   )}
                                   {u.developer && (
                                     <span className="px-1 py-0.2 rounded bg-purple-500/20 text-purple-400 border border-purple-500/30 text-[9px] font-bold font-mono">
@@ -921,7 +920,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
                               }`}
                               title="Toggle Blue Tick (Verified)"
                             >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <VerifiedBadge size="xs" />
                               <span>{u.verified ? 'Blue Tick' : 'None'}</span>
                             </button>
                           </td>
@@ -1374,24 +1373,50 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onSwitchToMainSite }) 
                   <div className="p-3 rounded-xl bg-[#080d12] border border-[#1e293b]">
                     <div className="text-[11px] text-slate-400 font-medium">Database Host</div>
                     <div className="text-xs font-semibold text-slate-200 mt-0.5 truncate font-mono">
-                      {dbInfo?.host || 'localhost'}
+                      {dbInfo?.host || 'localhost (VPS disk)'}
                     </div>
                   </div>
 
                   <div className="p-3 rounded-xl bg-[#080d12] border border-[#1e293b]">
                     <div className="text-[11px] text-slate-400 font-medium">Database Name</div>
                     <div className="text-xs font-semibold text-slate-200 mt-0.5 truncate font-mono">
-                      {dbInfo?.database || 'database.json'}
+                      {dbInfo?.database || 'data/database.json'}
                     </div>
                   </div>
 
                   <div className="p-3 rounded-xl bg-[#080d12] border border-[#1e293b]">
                     <div className="text-[11px] text-slate-400 font-medium">Database User</div>
                     <div className="text-xs font-semibold text-slate-200 mt-0.5 truncate font-mono">
-                      {dbInfo?.user || 'local'}
+                      {dbInfo?.user || 'vps-local'}
                     </div>
                   </div>
                 </div>
+
+                {/* VPS Disk Storage Metrics */}
+                {dbInfo?.vpsStorage && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3 rounded-xl bg-[#080d12] border border-emerald-500/20">
+                      <div className="text-[11px] text-emerald-400 font-medium">VPS Media Files (Disk)</div>
+                      <div className="text-xs font-semibold text-white mt-0.5 font-mono">
+                        {dbInfo.vpsStorage.uploadsCount} files ({(dbInfo.vpsStorage.uploadsSizeBytes / (1024 * 1024)).toFixed(2)} MB)
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[#080d12] border border-emerald-500/20">
+                      <div className="text-[11px] text-emerald-400 font-medium">VPS Database Size</div>
+                      <div className="text-xs font-semibold text-white mt-0.5 font-mono">
+                        {(dbInfo.vpsStorage.databaseSizeBytes / 1024).toFixed(1)} KB
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[#080d12] border border-emerald-500/20">
+                      <div className="text-[11px] text-emerald-400 font-medium">VPS Storage Folder</div>
+                      <div className="text-[11px] font-semibold text-slate-200 mt-0.5 truncate font-mono" title={dbInfo.vpsStorage.dataDir}>
+                        {dbInfo.vpsStorage.dataDir}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {!dbInfo?.connected && (
                   <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/20 text-xs text-slate-300 leading-relaxed">

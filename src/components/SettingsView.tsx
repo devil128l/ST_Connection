@@ -65,9 +65,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       if (typeof reader.result === 'string') {
-        setAvatar(reader.result);
+        const uploadedUrl = await api.uploadMedia(reader.result, 'avatar');
+        setAvatar(uploadedUrl);
       }
     };
     reader.readAsDataURL(file);
@@ -363,6 +364,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     onClick={() => {
                       onSelectWallpaper(wall.id);
                       localStorage.setItem('st_chat_wallpaper', wall.id);
+                      api.updateProfile({ chatWallpaper: wall.id })
+                        .then(updated => {
+                          onUpdateUser(updated);
+                          setStatusMsg({ text: `Wallpaper "${wall.name}" saved to VPS!` });
+                        })
+                        .catch(() => {});
                     }}
                     className={`h-28 rounded-xl p-3 border-2 flex flex-col justify-between cursor-pointer transition relative overflow-hidden ${
                       isSelected ? 'border-emerald-500 ring-2 ring-emerald-500/20' : 'border-[#2a3942] hover:border-slate-500'

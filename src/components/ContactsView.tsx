@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Search, UserCheck, MessageSquare, ShieldAlert, CheckCircle2, Code2, Phone, Video } from 'lucide-react';
+import { Search, UserCheck, MessageSquare, ShieldAlert, Code2, Phone, Video } from 'lucide-react';
 import { SafeUser } from '../types.js';
 import { api } from '../utils/api.js';
+import { VerifiedBadge } from './VerifiedBadge.js';
 
 interface ContactsViewProps {
   currentUser: SafeUser;
@@ -91,9 +92,7 @@ export const ContactsView: React.FC<ContactsViewProps> = ({
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <h4 className="text-sm font-semibold text-white truncate">{user.displayName}</h4>
                       {user.verified && (
-                        <span title="Verified Account">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-sky-400 shrink-0 fill-sky-400/20" />
-                        </span>
+                        <VerifiedBadge size="sm" title="Meta Verified Account" />
                       )}
                       {user.developer && (
                         <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0" title="Developer Badge">

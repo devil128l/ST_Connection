@@ -34,7 +34,7 @@
       "coverImage": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='200'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%230f172a'/%3E%3Cstop offset='50%25' stop-color='%23134e4a'/%3E%3Cstop offset='100%25' stop-color='%23064e3b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23g)'/%3E%3C/svg%3E",
       "bio": "Platform founder and system administrator for ST CONNECTION.",
       "role": "super_admin",
-      "verified": false,
+      "verified": true,
       "developer": false,
       "status": "active",
       "isOnline": true,
@@ -72,19 +72,52 @@
       "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
       "bio": "Hey there! I am using ST CONNECTION.",
       "role": "user",
-      "verified": false,
+      "verified": true,
       "developer": false,
       "status": "active",
-      "isOnline": true,
-      "lastSeen": "2026-11-08T22:17:12.619Z",
-      "passwordHash": "897531bbf21779269d3c0d798a4f1ac580a7bc1e2a967ec52febfc0bcf739b7470159ab587791b59b815d388ee1a43b1c378dd69826c8af828694522f054dec0",
-      "passwordSalt": "c7d5c19b0e36c2e224fc2c60b68fea1b",
+      "isOnline": false,
+      "lastSeen": "2026-11-10T02:25:49.883Z",
+      "passwordHash": "ccce9ebcba1a31ce687583c6d3ebfbe95a258733bfb2b62cfa8df6251187eb3918b84bd6d82869685b394c40b5b2dd618d9235ffffda7074fcbb108fa70df9f6",
+      "passwordSalt": "0bfb8014e90e55f3daa2570b832c5457",
       "twoFactorEnabled": false,
       "emailVerified": true,
       "createdAt": "2026-11-08T22:16:13.585Z"
+    },
+    {
+      "id": "usr_1794273301065_6160e2",
+      "username": "soham",
+      "email": "mamonhait549@gmail.com",
+      "displayName": "Soham",
+      "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "bio": "Hey there! I am using ST CONNECTION.",
+      "role": "user",
+      "verified": true,
+      "developer": false,
+      "status": "active",
+      "isOnline": true,
+      "lastSeen": "2026-11-10T02:16:32.163Z",
+      "passwordHash": "b9c7b39ea547ba8fe921b244b4a777cc3becf5ac95f58915f279e68d0363efd45412a4d6ffc66e7f750dc037a5392f0a1263ab573874ebe6953a6d5aca1a608f",
+      "passwordSalt": "d55891a0cffc3a675a149a6ccb9839d8",
+      "twoFactorEnabled": false,
+      "emailVerified": true,
+      "createdAt": "2026-11-10T01:15:01.065Z"
     }
   ],
   "chats": [
+    {
+      "id": "chat_ai_usr_1794273301065_6160e2",
+      "type": "direct",
+      "participantIds": [
+        "usr_1794273301065_6160e2",
+        "usr_st_ai"
+      ],
+      "lastMessage": {
+        "content": "👋 Hello! Welcome to ST CONNECTION. I am your built-in AI Assistant. How can I help you today? You can chat with contacts, start a voice/video call, create channels, or ask me anything!",
+        "senderId": "usr_st_ai",
+        "createdAt": "2026-11-10T02:19:10.428Z"
+      },
+      "createdAt": "2026-11-10T01:15:01.065Z"
+    },
     {
       "id": "chat_ai_usr_1794176173584_f83624",
       "type": "direct",
@@ -93,9 +126,9 @@
         "usr_st_ai"
       ],
       "lastMessage": {
-        "content": "Hello Rrr! Welcome to ST CONNECTION. I am your real-time AI assistant. Ask me anything, or start a chat with any contact!",
-        "senderId": "usr_st_ai",
-        "createdAt": "2026-11-08T22:16:13.585Z"
+        "content": "Voice message (1s)",
+        "senderId": "usr_1794176173584_f83624",
+        "createdAt": "2026-11-10T02:33:51.122Z"
       },
       "createdAt": "2026-11-08T22:16:13.585Z"
     }
@@ -112,6 +145,163 @@
       "reactions": [],
       "status": "read",
       "createdAt": "2026-11-08T22:16:13.585Z"
+    },
+    {
+      "id": "msg_welcome_1794273301065",
+      "chatId": "chat_ai_usr_1794273301065_6160e2",
+      "senderId": "usr_st_ai",
+      "senderName": "ST AI Assistant",
+      "senderAvatar": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80",
+      "content": "Hello Soham! Welcome to ST CONNECTION. I am your real-time AI assistant. Ask me anything, or start a chat with any contact!",
+      "type": "text",
+      "reactions": [],
+      "status": "read",
+      "createdAt": "2026-11-10T01:15:01.065Z"
+    },
+    {
+      "id": "msg_1794273345638_566e32",
+      "chatId": "chat_ai_usr_1794273301065_6160e2",
+      "senderId": "usr_1794273301065_6160e2",
+      "senderName": "Soham",
+      "senderAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "content": "Hii",
+      "type": "text",
+      "reactions": [],
+      "status": "delivered",
+      "createdAt": "2026-11-10T01:15:45.638Z"
+    },
+    {
+      "id": "msg_ai_1794273349777",
+      "chatId": "chat_ai_usr_1794273301065_6160e2",
+      "senderId": "usr_st_ai",
+      "senderName": "ST AI Assistant",
+      "senderAvatar": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80",
+      "content": "👋 Hello! Welcome to ST CONNECTION. I am your built-in AI Assistant. How can I help you today? You can chat with contacts, start a voice/video call, create channels, or ask me anything!",
+      "type": "text",
+      "reactions": [],
+      "status": "read",
+      "createdAt": "2026-11-10T01:15:49.777Z"
+    },
+    {
+      "id": "msg_1794273354878_367e28",
+      "chatId": "chat_ai_usr_1794273301065_6160e2",
+      "senderId": "usr_1794273301065_6160e2",
+      "senderName": "Soham",
+      "senderAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "content": "Sure, let me check!",
+      "type": "text",
+      "reactions": [],
+      "status": "delivered",
+      "createdAt": "2026-11-10T01:15:54.878Z"
+    },
+    {
+      "id": "msg_ai_1794273360525",
+      "chatId": "chat_ai_usr_1794273301065_6160e2",
+      "senderId": "usr_st_ai",
+      "senderName": "ST AI Assistant",
+      "senderAvatar": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80",
+      "content": "✨ I received your message: \"Sure, let me check!\".\n\nI am running on the server. If you want full generative conversational capabilities, you can enter a free Google Gemini API Key in the Admin Portal (> Gemini AI Engine) or run a local model like Ollama (llama3.2) on your VPS!",
+      "type": "text",
+      "reactions": [],
+      "status": "read",
+      "createdAt": "2026-11-10T01:16:00.525Z"
+    },
+    {
+      "id": "msg_1794273365444_1554c1",
+      "chatId": "chat_ai_usr_1794273301065_6160e2",
+      "senderId": "usr_1794273301065_6160e2",
+      "senderName": "Soham",
+      "senderAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "content": "Thanks!",
+      "type": "text",
+      "reactions": [],
+      "status": "delivered",
+      "createdAt": "2026-11-10T01:16:05.444Z"
+    },
+    {
+      "id": "msg_ai_1794273629957",
+      "chatId": "chat_ai_usr_1794273301065_6160e2",
+      "senderId": "usr_st_ai",
+      "senderName": "ST AI Assistant",
+      "senderAvatar": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80",
+      "content": "✨ I received your message: \"Thanks!\".\n\nI am running on the server. If you want full generative conversational capabilities, you can enter a free Google Gemini API Key in the Admin Portal (> Gemini AI Engine) or run a local model like Ollama (llama3.2) on your VPS!",
+      "type": "text",
+      "reactions": [],
+      "status": "read",
+      "createdAt": "2026-11-10T01:20:29.957Z"
+    },
+    {
+      "id": "msg_1794276829795_813264",
+      "chatId": "chat_ai_usr_1794273301065_6160e2",
+      "senderId": "usr_1794273301065_6160e2",
+      "senderName": "Soham",
+      "senderAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "content": "You are welcome!",
+      "type": "text",
+      "reactions": [],
+      "status": "delivered",
+      "createdAt": "2026-11-10T02:13:49.795Z"
+    },
+    {
+      "id": "msg_1794277117758_527690",
+      "chatId": "chat_ai_usr_1794273301065_6160e2",
+      "senderId": "usr_1794273301065_6160e2",
+      "senderName": "Soham",
+      "senderAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "content": "Hii",
+      "type": "text",
+      "reactions": [],
+      "status": "delivered",
+      "createdAt": "2026-11-10T02:18:37.758Z"
+    },
+    {
+      "id": "msg_ai_1794277150428",
+      "chatId": "chat_ai_usr_1794273301065_6160e2",
+      "senderId": "usr_st_ai",
+      "senderName": "ST AI Assistant",
+      "senderAvatar": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80",
+      "content": "👋 Hello! Welcome to ST CONNECTION. I am your built-in AI Assistant. How can I help you today? You can chat with contacts, start a voice/video call, create channels, or ask me anything!",
+      "type": "text",
+      "reactions": [],
+      "status": "read",
+      "createdAt": "2026-11-10T02:19:10.428Z"
+    },
+    {
+      "id": "msg_1794277594816_f84c85",
+      "chatId": "chat_ai_usr_1794176173584_f83624",
+      "senderId": "usr_1794176173584_f83624",
+      "senderName": "Rrr",
+      "senderAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "content": "Hello! How are you?",
+      "type": "text",
+      "reactions": [],
+      "status": "delivered",
+      "createdAt": "2026-11-10T02:26:34.816Z"
+    },
+    {
+      "id": "msg_1794277855820_dec6e5",
+      "chatId": "chat_ai_usr_1794176173584_f83624",
+      "senderId": "usr_1794176173584_f83624",
+      "senderName": "Rrr",
+      "senderAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "content": "Hello",
+      "type": "text",
+      "reactions": [],
+      "status": "delivered",
+      "createdAt": "2026-11-10T02:30:55.820Z"
+    },
+    {
+      "id": "msg_1794278031122_189584",
+      "chatId": "chat_ai_usr_1794176173584_f83624",
+      "senderId": "usr_1794176173584_f83624",
+      "senderName": "Rrr",
+      "senderAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "content": "Voice message (1s)",
+      "type": "audio",
+      "audioDuration": 1,
+      "reactions": [],
+      "status": "delivered",
+      "createdAt": "2026-11-10T02:33:51.122Z"
     }
   ],
   "channels": [
@@ -124,20 +314,143 @@
       "coverImage": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='200'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%230f172a'/%3E%3Cstop offset='50%25' stop-color='%23047857'/%3E%3Cstop offset='100%25' stop-color='%23064e3b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100%25' height='100%25' fill='url(%23g)'/%3E%3C/svg%3E",
       "ownerId": "usr_superadmin",
       "verified": true,
-      "subscribersCount": 2,
+      "subscribersCount": 3,
       "subscriberIds": [
         "usr_superadmin",
-        "usr_1794176173584_f83624"
+        "usr_1794176173584_f83624",
+        "usr_1794273301065_6160e2"
       ],
       "createdAt": "2026-11-06T19:00:00.000Z"
     }
   ],
   "channelPosts": [],
-  "stories": [],
+  "stories": [
+    {
+      "id": "story_1794277707366_5a5ecc",
+      "userId": "usr_1794176173584_f83624",
+      "username": "Rrr",
+      "userAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "type": "text",
+      "content": "V",
+      "backgroundColor": "from-teal-800 to-emerald-950",
+      "fontStyle": "sans",
+      "song": {
+        "id": "song_kahani_suno",
+        "title": "Kahani Suno 2.0",
+        "artist": "Kaifi Khalil",
+        "albumArt": "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&auto=format&fit=crop&q=80",
+        "duration": 30,
+        "audioUrl": "/audio/song_kahani_suno.wav"
+      },
+      "viewers": [
+        {
+          "userId": "usr_1794176173584_f83624",
+          "username": "Rrr",
+          "viewedAt": "2026-11-10T02:28:34.957Z"
+        }
+      ],
+      "expiresAt": 1794364107366,
+      "createdAt": "2026-11-10T02:28:27.366Z"
+    }
+  ],
   "contactRequests": [],
-  "callRecords": [],
+  "callRecords": [
+    {
+      "id": "call_1794278021892_493d60",
+      "callerId": "usr_1794176173584_f83624",
+      "callerName": "Rrr",
+      "callerAvatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+      "receiverId": "usr_st_ai",
+      "receiverName": "ST AI Assistant",
+      "type": "voice",
+      "status": "missed",
+      "durationSeconds": 0,
+      "createdAt": "2026-11-10T02:33:41.892Z"
+    }
+  ],
   "reports": [],
   "auditLogs": [
+    {
+      "id": "audit_1794278087479",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "action": "UPDATE_USER",
+      "target": "User superadmin (usr_superadmin) updated. Status: active, Role: super_admin, Verified: true, Dev: false",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "createdAt": "2026-11-10T02:34:47.479Z"
+    },
+    {
+      "id": "audit_1794277802816",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "action": "UPDATE_USER",
+      "target": "User rrrr (usr_1794176173584_f83624) updated. Status: active, Role: user, Verified: true, Dev: false",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "createdAt": "2026-11-10T02:30:02.816Z"
+    },
+    {
+      "id": "audit_1794277799562",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "action": "UPDATE_USER",
+      "target": "User rrrr (usr_1794176173584_f83624) updated. Status: active, Role: user, Verified: true, Dev: true",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "createdAt": "2026-11-10T02:29:59.562Z"
+    },
+    {
+      "id": "audit_1794277511993",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "action": "UPDATE_USER",
+      "target": "User rrrr (usr_1794176173584_f83624) updated. Status: active, Role: user, Verified: true, Dev: false",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "createdAt": "2026-11-10T02:25:11.993Z"
+    },
+    {
+      "id": "audit_1794277499432",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "action": "ADMIN_LOGIN",
+      "target": "Signed in to Admin Portal (super_admin)",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "createdAt": "2026-11-10T02:24:59.432Z"
+    },
+    {
+      "id": "audit_1794277499431",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "action": "ADMIN_LOGIN",
+      "target": "Signed in to Admin Portal (super_admin)",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "createdAt": "2026-11-10T02:24:59.431Z"
+    },
+    {
+      "id": "audit_1794277499430",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "action": "ADMIN_LOGIN",
+      "target": "Signed in to Admin Portal (super_admin)",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "createdAt": "2026-11-10T02:24:59.430Z"
+    },
+    {
+      "id": "audit_1794276862829",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "action": "UPDATE_USER",
+      "target": "User soham (usr_1794273301065_6160e2) updated. Status: active, Role: user, Verified: true, Dev: false",
+      "ip": "2409:4088:9d83:2011::c8ca:f013",
+      "createdAt": "2026-11-10T02:14:22.829Z"
+    },
+    {
+      "id": "audit_1794276852265",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "action": "ADMIN_LOGIN",
+      "target": "Signed in to Admin Portal (super_admin)",
+      "ip": "2409:4088:9d83:2011::c8ca:f013",
+      "createdAt": "2026-11-10T02:14:12.265Z"
+    },
     {
       "id": "audit_1794176263668",
       "adminId": "usr_superadmin",
@@ -166,8 +479,93 @@
       "createdAt": "2026-11-06T19:00:00.000Z"
     }
   ],
-  "loginLogs": [],
+  "loginLogs": [
+    {
+      "id": "login_1794277594139",
+      "emailOrUsername": "superadmin",
+      "status": "success",
+      "ip": "127.0.0.1",
+      "userAgent": "curl/7.88.1",
+      "role": "super_admin",
+      "createdAt": "2026-11-10T02:26:34.139Z"
+    },
+    {
+      "id": "login_1794277427678",
+      "emailOrUsername": "refelstan@gmail.com",
+      "status": "success",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+      "role": "user",
+      "createdAt": "2026-11-10T02:23:47.678Z"
+    },
+    {
+      "id": "login_1794276814540",
+      "emailOrUsername": "mamonhait549@gmail.com",
+      "status": "success",
+      "ip": "2409:4088:9d83:2011::c8ca:f013",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+      "role": "user",
+      "createdAt": "2026-11-10T02:13:34.540Z"
+    },
+    {
+      "id": "login_1794276794196",
+      "emailOrUsername": "refelstan@gmail.com",
+      "status": "failed",
+      "ip": "2409:4088:9d83:2011::c8ca:f013",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+      "role": "user",
+      "createdAt": "2026-11-10T02:13:14.196Z"
+    },
+    {
+      "id": "login_1794273252775",
+      "emailOrUsername": "Soham",
+      "status": "failed",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+      "createdAt": "2026-11-10T01:14:12.775Z"
+    }
+  ],
   "adminSessions": [
+    {
+      "sessionId": "sess_1794277499432_762d6e9f",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "role": "super_admin",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+      "createdAt": "2026-11-10T02:24:59.432Z",
+      "lastActiveAt": "2026-11-10T02:24:59.432Z"
+    },
+    {
+      "sessionId": "sess_1794277499431_753f51fb",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "role": "super_admin",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+      "createdAt": "2026-11-10T02:24:59.431Z",
+      "lastActiveAt": "2026-11-10T02:24:59.431Z"
+    },
+    {
+      "sessionId": "sess_1794277499429_03c7e05c",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "role": "super_admin",
+      "ip": "2409:4088:9d83:2011::c8ca:f013, 169.254.169.126",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+      "createdAt": "2026-11-10T02:24:59.429Z",
+      "lastActiveAt": "2026-11-10T02:24:59.429Z"
+    },
+    {
+      "sessionId": "sess_1794276852264_36233ef0",
+      "adminId": "usr_superadmin",
+      "adminUsername": "superadmin",
+      "role": "super_admin",
+      "ip": "2409:4088:9d83:2011::c8ca:f013",
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+      "createdAt": "2026-11-10T02:14:12.264Z",
+      "lastActiveAt": "2026-11-10T02:14:12.265Z"
+    },
     {
       "sessionId": "sess_1794176263667_20d5f4e4",
       "adminId": "usr_superadmin",

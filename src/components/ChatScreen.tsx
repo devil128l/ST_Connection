@@ -37,6 +37,7 @@ import { Chat, Message, SafeUser } from '../types.js';
 import { api } from '../utils/api.js';
 import { sounds } from '../utils/audio.js';
 import { WALLPAPER_PRESETS } from './SettingsView.js';
+import { VerifiedBadge } from './VerifiedBadge.js';
 
 interface ChatScreenProps {
   chat: Chat;
@@ -176,20 +177,45 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
   };
 
   // Voice note recording simulation / recording
+  // Voice note recording with real audio & multi-format support
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const currentAudioElemRef = useRef<HTMLAudioElement | null>(null);
 
-  // Voice note recording with real audio
   const startRecording = async () => {
     sounds.playRecordStart();
     setIsRecording(true);
     setRecordingSeconds(0);
     audioChunksRef.current = [];
 
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.warn('Microphone access requires HTTPS or localhost on VPS');
+      // Set timer to still allow simulated voice message if hardware is restricted
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds(prev => prev + 1);
+      }, 1000);
+      return;
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      let mimeType = '';
+      if (typeof MediaRecorder !== 'undefined') {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+        else if (MediaRecorder.isTypeSupported('audio/webm')) mimeType = 'audio/webm';
+        else if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+        else if (MediaRecorder.isTypeSupported('audio/aac')) mimeType = 'audio/aac';
+        else if (MediaRecorder.isTypeSupported('audio/ogg')) mimeType = 'audio/ogg';
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
@@ -198,7 +224,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
         }
       };
 
-      recorder.start();
+      recorder.start(250); // Emit chunks every 250ms
     } catch (e) {
       console.warn('Microphone permission not granted or device unavailable:', e);
     }
@@ -216,7 +242,8 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64Audio = reader.result as string;
@@ -233,13 +260,36 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
       };
       mediaRecorderRef.current.stop();
     } else {
-      onSendMessage(
-        `Voice message (${duration}s)`,
-        'audio',
-        undefined,
-        replyingTo?.id,
-        duration
-      );
+      // In case recording had no hardware stream, create a synthesized tone voice note
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          const osc = ctx.createOscillator();
+          const dst = ctx.createMediaStreamDestination();
+          osc.frequency.setValueAtTime(440, ctx.currentTime);
+          osc.connect(dst);
+          osc.start();
+          const rec = new MediaRecorder(dst.stream);
+          const chunks: Blob[] = [];
+          rec.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.push(ev.data); };
+          rec.onstop = () => {
+            const blob = new Blob(chunks, { type: 'audio/webm' });
+            const fr = new FileReader();
+            fr.onloadend = () => {
+              onSendMessage(`Voice message (${duration}s)`, 'audio', fr.result as string, replyingTo?.id, duration);
+            };
+            fr.readAsDataURL(blob);
+            dst.stream.getTracks().forEach(t => t.stop());
+          };
+          rec.start();
+          setTimeout(() => { rec.stop(); osc.stop(); }, 500);
+        } else {
+          onSendMessage(`Voice message (${duration}s)`, 'audio', undefined, replyingTo?.id, duration);
+        }
+      } catch (err) {
+        onSendMessage(`Voice message (${duration}s)`, 'audio', undefined, replyingTo?.id, duration);
+      }
     }
     setReplyingTo(null);
   };
@@ -254,27 +304,75 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
     setRecordingSeconds(0);
   };
 
-  // Play audio voice note
-  const togglePlayAudio = (id: string, durationSec = 10) => {
+  // Play audio voice note with real HTMLAudioElement
+  const togglePlayAudio = (id: string, mediaUrl?: string, durationSec = 10) => {
+    // If clicking same audio that is currently active
     if (playingAudioId === id) {
-      // Pause
+      if (currentAudioElemRef.current) {
+        if (!currentAudioElemRef.current.paused) {
+          currentAudioElemRef.current.pause();
+          setPlayingAudioId(null);
+          return;
+        } else {
+          currentAudioElemRef.current.play().catch(console.warn);
+          setPlayingAudioId(id);
+          return;
+        }
+      }
       setPlayingAudioId(null);
-      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
-    } else {
-      setPlayingAudioId(id);
-      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
+      return;
+    }
 
-      audioIntervalRef.current = setInterval(() => {
-        setAudioProgress(prev => {
-          const current = prev[id] || 0;
-          if (current >= 100) {
-            setPlayingAudioId(null);
-            clearInterval(audioIntervalRef.current);
-            return { ...prev, [id]: 0 };
-          }
-          return { ...prev, [id]: current + (100 / (durationSec * 10)) };
-        });
-      }, 100);
+    // Stop and cleanup previously playing audio element
+    if (currentAudioElemRef.current) {
+      try {
+        currentAudioElemRef.current.pause();
+        currentAudioElemRef.current.currentTime = 0;
+      } catch (e) {}
+      currentAudioElemRef.current = null;
+    }
+
+    if (!mediaUrl) {
+      // Fallback audible beep if no mediaUrl attached
+      setPlayingAudioId(id);
+      sounds.playMessageReceived();
+      setTimeout(() => {
+        setPlayingAudioId(null);
+        setAudioProgress(prev => ({ ...prev, [id]: 0 }));
+      }, 1500);
+      return;
+    }
+
+    try {
+      const audio = new Audio(mediaUrl);
+      currentAudioElemRef.current = audio;
+      setPlayingAudioId(id);
+
+      audio.ontimeupdate = () => {
+        const dur = audio.duration && !isNaN(audio.duration) && isFinite(audio.duration) ? audio.duration : durationSec;
+        const pct = Math.min(100, Math.max(0, (audio.currentTime / dur) * 100));
+        setAudioProgress(prev => ({ ...prev, [id]: pct }));
+      };
+
+      audio.onended = () => {
+        setPlayingAudioId(null);
+        setAudioProgress(prev => ({ ...prev, [id]: 0 }));
+        currentAudioElemRef.current = null;
+      };
+
+      audio.onerror = (e) => {
+        console.warn('Voice message playback failed:', e);
+        setPlayingAudioId(null);
+        currentAudioElemRef.current = null;
+      };
+
+      audio.play().catch(err => {
+        console.warn('Audio play auto-policy prevented:', err);
+        setPlayingAudioId(null);
+      });
+    } catch (err) {
+      console.warn('Failed to initialize Audio element:', err);
+      setPlayingAudioId(null);
     }
   };
 
@@ -466,9 +564,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                 {isDirect ? target.displayName : chat.name}
               </h3>
               {target.verified && (
-                <span title="Verified Blue Tick">
-                  <CheckCircle2 className="w-4 h-4 text-sky-400 shrink-0" />
-                </span>
+                <VerifiedBadge size="md" title="Meta Verified Blue Tick" />
               )}
               {target.developer && (
                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[9px] font-bold font-mono">
@@ -817,19 +913,54 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                       </div>
                     )}
 
+                    {/* 2b. Video Attachment */}
+                    {msg.type === 'video' && msg.mediaUrl && (
+                      <div className="rounded-xl overflow-hidden mb-1 max-h-72 bg-black">
+                        <video
+                          src={msg.mediaUrl}
+                          controls
+                          playsInline
+                          className="w-full max-h-72 object-contain"
+                        />
+                      </div>
+                    )}
+
+                    {/* 2c. File / Document Attachment */}
+                    {msg.type === 'file' && msg.mediaUrl && (
+                      <a
+                        href={msg.mediaUrl}
+                        download={msg.fileName || msg.content || 'attachment'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 p-2.5 rounded-xl bg-black/25 hover:bg-black/40 border border-white/10 transition mb-1"
+                      >
+                        <Paperclip className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-white truncate">
+                            {msg.fileName || msg.content || 'Document'}
+                          </p>
+                          <p className="text-[10px] text-emerald-300">Click to download from VPS</p>
+                        </div>
+                      </a>
+                    )}
+
                     {/* 3. Audio Voice Note with Interactive Waveform */}
                     {msg.type === 'audio' && (
                       <div className="flex items-center gap-3 py-1 min-w-[220px]">
                         <button
                           type="button"
-                          onClick={() => togglePlayAudio(msg.id, msg.audioDuration || 6)}
+                          onClick={() => togglePlayAudio(msg.id, msg.mediaUrl, msg.audioDuration || 6)}
                           className="w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black flex items-center justify-center shrink-0 transition cursor-pointer shadow"
                         >
                           {playingAudioId === msg.id ? <Pause className="w-4 h-4 fill-black" /> : <Play className="w-4 h-4 fill-black ml-0.5" />}
                         </button>
 
                         {/* Waveform bars */}
-                        <div className="flex-1 flex items-center gap-0.5 h-6">
+                        <div
+                          className="flex-1 flex items-center gap-0.5 h-6 cursor-pointer"
+                          onClick={() => togglePlayAudio(msg.id, msg.mediaUrl, msg.audioDuration || 6)}
+                          title="Click to play / pause voice message"
+                        >
                           {[40, 70, 30, 90, 60, 45, 85, 30, 60, 95, 40, 75, 50, 80, 35].map((height, idx) => {
                             const activePct = audioProgress[msg.id] || 0;
                             const isBarActive = (idx / 15) * 100 <= activePct;
@@ -846,7 +977,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                         </div>
 
                         <span className="text-[10px] text-slate-300 font-mono shrink-0">
-                          0:0{msg.audioDuration || 4}
+                          0:{String(msg.audioDuration || 4).padStart(2, '0')}
                         </span>
                       </div>
                     )}

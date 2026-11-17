@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Radio, Users, CheckCircle, Plus, Heart, Share2, Send, X } from 'lucide-react';
+import { Radio, Users, Plus, Heart, Share2, Send, X } from 'lucide-react';
 import { Channel, ChannelPost, SafeUser } from '../types.js';
 import { api } from '../utils/api.js';
+import { VerifiedBadge } from './VerifiedBadge.js';
 
 interface ChannelsViewProps {
   currentUser: SafeUser;
@@ -150,7 +151,7 @@ export const ChannelsView: React.FC<ChannelsViewProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1">
                     <h4 className="text-xs sm:text-sm font-semibold truncate text-white">{chan.name}</h4>
-                    {chan.verified && <CheckCircle className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
+                    {chan.verified && <VerifiedBadge size="sm" />}
                   </div>
                   <p className="text-[11px] text-slate-400 truncate">@{chan.handle}</p>
                 </div>
@@ -178,7 +179,7 @@ export const ChannelsView: React.FC<ChannelsViewProps> = ({
               <div>
                 <div className="flex items-center gap-1.5">
                   <h3 className="text-base font-bold text-white">{selectedChannel.name}</h3>
-                  {selectedChannel.verified && <CheckCircle className="w-4 h-4 text-sky-400" />}
+                  {selectedChannel.verified && <VerifiedBadge size="md" />}
                 </div>
                 <p className="text-xs text-slate-400">
                   @{selectedChannel.handle} • {selectedChannel.subscribersCount} subscribers

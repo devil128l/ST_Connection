@@ -13,6 +13,7 @@ import {
   SwitchCamera,
   Users,
   ShieldCheck,
+  Info,
 } from 'lucide-react';
 import { webrtc, CallSession } from '../utils/webrtc.js';
 import { sounds } from '../utils/audio.js';
@@ -40,10 +41,15 @@ export const CallModal: React.FC<CallModalProps> = ({
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [duration, setDuration] = useState(0);
+  const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Check if browser is in secure context (HTTPS / localhost) for VPS guidance
+  const isSecure = typeof window !== 'undefined' ? (window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1') : true;
 
   // Play ringtone on incoming call
   useEffect(() => {
@@ -75,7 +81,53 @@ export const CallModal: React.FC<CallModalProps> = ({
     if (localVideoRef.current && stream) {
       localVideoRef.current.srcObject = stream;
     }
-  }, [session.status, isVideoOff]);
+  }, [session.status, isVideoOff, session.type]);
+
+  // Attach remote media stream when received
+  useEffect(() => {
+    const attachStreams = (stream: MediaStream) => {
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = stream;
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = stream;
+        remoteAudioRef.current.play().catch(e => {
+          console.warn('Audio play auto-policy handled:', e);
+        });
+      }
+
+      const checkVideo = () => {
+        const videoTracks = stream.getVideoTracks();
+        setHasRemoteVideo(videoTracks.length > 0 && videoTracks[0].readyState === 'live');
+      };
+      checkVideo();
+      stream.onaddtrack = checkVideo;
+      stream.onremovetrack = checkVideo;
+    };
+
+    const currentRemote = webrtc.getRemoteStream();
+    if (currentRemote) {
+      attachStreams(currentRemote);
+    }
+
+    // Set callback in webrtc
+    webrtc.setCallbacks(
+      (webrtc as any).sendSignalCallback || (() => {}),
+      (stream) => {
+        attachStreams(stream);
+      }
+    );
+  }, [session.status]);
+
+  // Sync speaker volume
+  useEffect(() => {
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.muted = isSpeakerMuted;
+    }
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.muted = isSpeakerMuted;
+    }
+  }, [isSpeakerMuted]);
 
   const toggleMute = () => {
     const next = !isMuted;
@@ -182,6 +234,9 @@ export const CallModal: React.FC<CallModalProps> = ({
       ref={containerRef}
       className="fixed inset-0 z-50 bg-[#0b141a] text-white flex flex-col justify-between overflow-hidden"
     >
+      {/* Hidden dedicated audio element for voice playback */}
+      <audio ref={remoteAudioRef} autoPlay playsInline />
+
       {/* Top Bar */}
       <div className="p-4 sm:p-6 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent z-20">
         <div className="flex items-center gap-3">
@@ -195,7 +250,7 @@ export const CallModal: React.FC<CallModalProps> = ({
             <div className="flex items-center gap-2 text-xs text-slate-400">
               <span className="flex items-center gap-1 text-emerald-400 font-mono">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                {session.status === 'connected' ? formatDuration(duration) : 'Ringing...'}
+                {session.status === 'connected' ? formatDuration(duration) : 'Calling (WebRTC STUN)...'}
               </span>
               <span>•</span>
               <span className="flex items-center gap-1 text-[11px] text-slate-400">
@@ -229,39 +284,59 @@ export const CallModal: React.FC<CallModalProps> = ({
         </div>
       </div>
 
+      {/* VPS Secure Context Tip (If running via insecure HTTP IP) */}
+      {!isSecure && (
+        <div className="mx-4 mb-2 p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-200 text-xs flex items-center gap-2 z-30">
+          <Info className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>
+            <strong>VPS Notice:</strong> WebRTC requires HTTPS or localhost for hardware camera/mic.
+            If running over an IP, use an SSL domain/proxy or Chrome flag <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>.
+          </span>
+        </div>
+      )}
+
       {/* Main Video / Participant Stage */}
       <div className="flex-1 relative flex items-center justify-center p-4">
-        {session.type === 'video' && !isVideoOff ? (
+        {session.type === 'video' ? (
           <div className="w-full h-full relative rounded-2xl overflow-hidden bg-black flex items-center justify-center">
-            {/* Remote Video Stream / Simulated feed */}
+            {/* Remote Video Stream */}
             <video
               ref={remoteVideoRef}
               autoPlay
               playsInline
-              className="w-full h-full object-cover"
+              className={`w-full h-full object-cover transition-opacity duration-300 ${hasRemoteVideo ? 'opacity-100' : 'opacity-0'}`}
             />
-            {/* Placeholder if remote stream video is connecting */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#111b21]/70">
-              <img
-                src={session.targetUserAvatar}
-                alt={session.targetUserName}
-                className="w-24 h-24 rounded-full object-cover border-2 border-emerald-500 shadow-2xl mb-3 animate-pulse"
-              />
-              <p className="text-sm font-semibold">{session.targetUserName}</p>
-              <p className="text-xs text-slate-400 mt-1 font-mono">
-                {session.status === 'connected' ? 'Connected • Live 720p HD' : 'Connecting peer-to-peer WebRTC...'}
-              </p>
-            </div>
+
+            {/* Connecting / Avatar Placeholder shown only when remote video track is not ready yet */}
+            {!hasRemoteVideo && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#111b21]">
+                <img
+                  src={session.targetUserAvatar}
+                  alt={session.targetUserName}
+                  className="w-24 h-24 rounded-full object-cover border-2 border-emerald-500 shadow-2xl mb-3 animate-pulse"
+                />
+                <p className="text-sm font-semibold text-white">{session.targetUserName}</p>
+                <p className="text-xs text-emerald-400 mt-1 font-mono">
+                  {session.status === 'connected' ? 'Connected • Establishing video stream...' : 'Calling peer via WebRTC STUN...'}
+                </p>
+              </div>
+            )}
 
             {/* Local Video Picture-in-Picture (PiP) */}
             <div className="absolute top-4 right-4 w-28 sm:w-36 aspect-video rounded-xl overflow-hidden border-2 border-white/20 shadow-2xl bg-slate-900 z-10">
-              <video
-                ref={localVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover mirror"
-              />
+              {isVideoOff ? (
+                <div className="w-full h-full flex items-center justify-center bg-slate-950 text-slate-500 text-xs">
+                  Camera Off
+                </div>
+              ) : (
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                />
+              )}
               <div className="absolute bottom-1 left-1 bg-black/60 px-1.5 py-0.5 rounded text-[9px] text-white">
                 You
               </div>
@@ -281,9 +356,25 @@ export const CallModal: React.FC<CallModalProps> = ({
               />
             </div>
             <h3 className="text-2xl font-bold text-white mb-1">{session.targetUserName}</h3>
-            <p className="text-sm text-emerald-400 font-mono">
-              {session.status === 'connected' ? formatDuration(duration) : 'Calling...'}
+            <p className="text-sm text-emerald-400 font-mono mb-4">
+              {session.status === 'connected' ? `Connected • ${formatDuration(duration)}` : 'Calling (STUN NAT Traversal)...'}
             </p>
+
+            {/* Equalizer animation when connected */}
+            {session.status === 'connected' && (
+              <div className="flex items-center gap-1 h-6">
+                {[40, 80, 50, 100, 60, 90, 45, 75, 30].map((h, i) => (
+                  <span
+                    key={i}
+                    className="w-1 bg-emerald-400 rounded-full animate-pulse"
+                    style={{
+                      height: `${h}%`,
+                      animationDelay: `${i * 120}ms`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

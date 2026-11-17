@@ -15,6 +15,7 @@ export interface SafeUser {
   twoFactorEnabled: boolean;
   emailVerified: boolean;
   customStatus?: string;
+  chatWallpaper?: string;
   createdAt: string;
 }
 
@@ -84,6 +85,15 @@ export interface Chat {
   createdAt: string;
 }
 
+export interface StorySong {
+  id: string;
+  title: string;
+  artist: string;
+  audioUrl?: string;
+  albumArt?: string;
+  duration?: number;
+}
+
 export interface Story {
   id: string;
   userId: string;
@@ -94,6 +104,7 @@ export interface Story {
   backgroundColor?: string;
   fontStyle?: string;
   mediaUrl?: string;
+  song?: StorySong;
   viewers: { userId: string; username: string; viewedAt: string }[];
   expiresAt: number;
   createdAt: string;

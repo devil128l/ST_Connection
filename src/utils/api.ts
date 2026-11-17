@@ -1,4 +1,4 @@
-import { SafeUser, Chat, Message, Story, Channel, ChannelPost, CallRecord, SystemSettings } from '../types.js';
+import { SafeUser, Chat, Message, Story, StorySong, Channel, ChannelPost, CallRecord, SystemSettings } from '../types.js';
 
 class ApiService {
   private gateToken: string | null = null;
@@ -222,6 +222,20 @@ class ApiService {
     }
   }
 
+  // VPS Native Media Upload
+  async uploadMedia(dataUrl: string, prefix = 'media'): Promise<string> {
+    if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
+    try {
+      const res = await this.request<{ url: string; provider: string }>('/api/storage/upload', {
+        method: 'POST',
+        body: JSON.stringify({ dataUrl, prefix }),
+      });
+      return res.url || dataUrl;
+    } catch {
+      return dataUrl;
+    }
+  }
+
   // Gate APIs
   async verifyGate(password: string) {
     const res = await this.request<{ success: boolean; gateToken: string; message: string }>('/api/gate/verify', {
@@ -422,7 +436,14 @@ class ApiService {
     return this.request<{ stories: Story[] }>('/api/stories');
   }
 
-  async createStory(data: { type: 'text' | 'image'; content?: string; backgroundColor?: string; mediaUrl?: string }) {
+  async createStory(data: {
+    type: 'text' | 'image';
+    content?: string;
+    backgroundColor?: string;
+    mediaUrl?: string;
+    fontStyle?: string;
+    song?: StorySong;
+  }) {
     return this.request<{ story: Story }>('/api/stories', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -663,6 +684,14 @@ class ApiService {
       error?: string | null;
       userCount?: number;
       messageCount?: number;
+      vpsStorage?: {
+        dataDir: string;
+        uploadsDir: string;
+        databaseSizeBytes: number;
+        uploadsCount: number;
+        uploadsSizeBytes: number;
+        totalVpsBytes: number;
+      };
     }>('/api/admin/database/status');
   }
 

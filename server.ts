@@ -8,6 +8,8 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import {
   db,
+  DATA_DIR,
+  UPLOADS_DIR,
   User,
   Message,
   Chat,
@@ -206,21 +208,154 @@ function createToken(userId: string): string {
 }
 
 // ==========================================
-// VPS NATIVE FILE STORAGE ENDPOINTS
+// VPS NATIVE FILE STORAGE ENGINE & HELPERS
 // ==========================================
-const UPLOADS_DIR = path.resolve(process.cwd(), 'data', 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
-app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d', acceptRanges: true }));
+
+const MIME_EXT_MAP: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/svg+xml': 'svg',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mpeg': 'mp3',
+  'audio/mp3': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/aac': 'aac',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'application/pdf': 'pdf',
+  'application/zip': 'zip',
+  'text/plain': 'txt',
+};
+
+function saveBase64ToVpsDisk(inputUrl: string | undefined, prefix = 'media'): string | undefined {
+  if (!inputUrl || typeof inputUrl !== 'string') return inputUrl;
+  // Already stored on VPS disk or external HTTP URL
+  if (!inputUrl.startsWith('data:')) return inputUrl;
+
+  // Keep lightweight inline SVG data URIs (e.g., default preset icons) intact
+  if (inputUrl.startsWith('data:image/svg+xml,%3C')) return inputUrl;
+
+  try {
+    const matches = inputUrl.match(/^data:([^;,]+)(?:;[^,]*)?;base64,(.+)$/s);
+    if (!matches || matches.length < 3) return inputUrl;
+
+    const mimeType = matches[1].toLowerCase().trim();
+    const base64Body = matches[2];
+    const buffer = Buffer.from(base64Body, 'base64');
+    if (buffer.length === 0) return inputUrl;
+
+    const ext = MIME_EXT_MAP[mimeType] || mimeType.split('/')[1]?.replace(/[^a-z0-9]/g, '') || 'bin';
+    const fileName = `${prefix}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
+    const filePath = path.join(UPLOADS_DIR, fileName);
+    fs.writeFileSync(filePath, buffer);
+    return `/uploads/${fileName}`;
+  } catch (err) {
+    console.warn('[VPS Storage] Failed to persist base64 media to disk:', err);
+    return inputUrl;
+  }
+}
+
+function deleteVpsUploadIfLocal(url?: string) {
+  if (!url || typeof url !== 'string' || !url.startsWith('/uploads/')) return;
+  try {
+    const safeName = path.basename(url);
+    const fullPath = path.join(UPLOADS_DIR, safeName);
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
+    }
+  } catch {}
+}
+
+// Migrate any inline base64 media stored inside database.json onto VPS disk
+function migrateExistingMediaToVpsDisk() {
+  let migratedCount = 0;
+  try {
+    db.update(d => {
+      d.users.forEach(u => {
+        if (u.avatar && u.avatar.startsWith('data:') && !u.avatar.startsWith('data:image/svg+xml,%3C')) {
+          const next = saveBase64ToVpsDisk(u.avatar, 'avatar');
+          if (next && next !== u.avatar) { u.avatar = next; migratedCount++; }
+        }
+        if (u.coverImage && u.coverImage.startsWith('data:') && !u.coverImage.startsWith('data:image/svg+xml,%3C')) {
+          const next = saveBase64ToVpsDisk(u.coverImage, 'cover');
+          if (next && next !== u.coverImage) { u.coverImage = next; migratedCount++; }
+        }
+      });
+
+      d.chats.forEach(c => {
+        if (c.avatar && c.avatar.startsWith('data:')) {
+          const next = saveBase64ToVpsDisk(c.avatar, 'group');
+          if (next && next !== c.avatar) { c.avatar = next; migratedCount++; }
+        }
+      });
+
+      d.messages.forEach(m => {
+        if (m.mediaUrl && m.mediaUrl.startsWith('data:')) {
+          const prefix = m.type === 'audio' ? 'voice' : m.type === 'video' ? 'video' : m.type === 'image' ? 'img' : 'file';
+          const next = saveBase64ToVpsDisk(m.mediaUrl, prefix);
+          if (next && next !== m.mediaUrl) { m.mediaUrl = next; migratedCount++; }
+        }
+      });
+
+      d.stories.forEach(s => {
+        if (s.mediaUrl && s.mediaUrl.startsWith('data:')) {
+          const next = saveBase64ToVpsDisk(s.mediaUrl, 'story');
+          if (next && next !== s.mediaUrl) { s.mediaUrl = next; migratedCount++; }
+        }
+        if (s.song?.audioUrl && s.song.audioUrl.startsWith('data:')) {
+          const next = saveBase64ToVpsDisk(s.song.audioUrl, 'story_song');
+          if (next && next !== s.song.audioUrl) { s.song.audioUrl = next; migratedCount++; }
+        }
+      });
+
+      d.channels.forEach(ch => {
+        if (ch.avatar && ch.avatar.startsWith('data:') && !ch.avatar.startsWith('data:image/svg+xml,%3C')) {
+          const next = saveBase64ToVpsDisk(ch.avatar, 'channel');
+          if (next && next !== ch.avatar) { ch.avatar = next; migratedCount++; }
+        }
+        if (ch.coverImage && ch.coverImage.startsWith('data:') && !ch.coverImage.startsWith('data:image/svg+xml,%3C')) {
+          const next = saveBase64ToVpsDisk(ch.coverImage, 'channel_cover');
+          if (next && next !== ch.coverImage) { ch.coverImage = next; migratedCount++; }
+        }
+      });
+
+      d.channelPosts.forEach(p => {
+        if (p.mediaUrl && p.mediaUrl.startsWith('data:')) {
+          const next = saveBase64ToVpsDisk(p.mediaUrl, 'post');
+          if (next && next !== p.mediaUrl) { p.mediaUrl = next; migratedCount++; }
+        }
+      });
+    });
+
+    if (migratedCount > 0) {
+      console.log(`[VPS Storage] Migrated ${migratedCount} inline media item(s) into ${UPLOADS_DIR}`);
+    }
+  } catch (err) {
+    console.warn('[VPS Storage] Media migration warning:', err);
+  }
+}
+migrateExistingMediaToVpsDisk();
 
 // Get storage configuration and status
 app.get('/api/storage/status', (_req: Request, res: Response) => {
+  const stats = db.getVpsStorageStats();
   return res.json({
     storage: {
       provider: 'vps-local',
       uploadPath: '/uploads',
       status: 'active',
+      ...stats,
     },
   });
 });
@@ -234,29 +369,11 @@ app.post('/api/storage/upload', async (req: Request, res: Response) => {
   if (!dataUrl) return res.status(400).json({ error: 'dataUrl is required' });
 
   try {
-    const matches = dataUrl.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-    if (matches && matches.length === 3) {
-      const mimeType = matches[1];
-      const buffer = Buffer.from(matches[2], 'base64');
-      const extMap: Record<string, string> = {
-        'image/jpeg': 'jpg',
-        'image/png': 'png',
-        'image/webp': 'webp',
-        'image/gif': 'gif',
-        'video/mp4': 'mp4',
-        'video/webm': 'webm',
-        'audio/webm': 'webm',
-        'audio/ogg': 'ogg',
-        'audio/mp3': 'mp3',
-        'audio/wav': 'wav',
-      };
-      const ext = extMap[mimeType] || 'bin';
-      const fileName = `${prefix}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
-      const filePath = path.join(UPLOADS_DIR, fileName);
-      fs.writeFileSync(filePath, buffer);
-      return res.json({ url: `/uploads/${fileName}`, provider: 'vps-local' });
-    }
-    return res.json({ url: dataUrl, provider: 'data-url' });
+    const savedUrl = saveBase64ToVpsDisk(dataUrl, prefix);
+    return res.json({
+      url: savedUrl || dataUrl,
+      provider: savedUrl && savedUrl.startsWith('/uploads/') ? 'vps-local' : 'data-url',
+    });
   } catch (err: any) {
     console.error('Storage upload error:', err);
     return res.status(500).json({ error: err.message || 'Upload failed' });
@@ -592,7 +709,10 @@ app.put('/api/auth/profile', (req: Request, res: Response) => {
   const userId = getAuthUserId(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { displayName, bio, avatar, coverImage, customStatus, twoFactorEnabled } = req.body;
+  const { displayName, bio, avatar, coverImage, customStatus, chatWallpaper, twoFactorEnabled } = req.body;
+
+  const savedAvatar = avatar !== undefined ? saveBase64ToVpsDisk(avatar, 'avatar') : undefined;
+  const savedCover = coverImage !== undefined ? saveBase64ToVpsDisk(coverImage, 'cover') : undefined;
 
   let updatedUser: User | null = null;
   db.update(d => {
@@ -600,9 +720,10 @@ app.put('/api/auth/profile', (req: Request, res: Response) => {
     if (u) {
       if (displayName !== undefined) u.displayName = displayName.trim();
       if (bio !== undefined) u.bio = bio.trim();
-      if (avatar !== undefined) u.avatar = avatar;
-      if (coverImage !== undefined) u.coverImage = coverImage;
+      if (savedAvatar !== undefined) u.avatar = savedAvatar;
+      if (savedCover !== undefined) u.coverImage = savedCover;
       if (customStatus !== undefined) u.customStatus = customStatus;
+      if (chatWallpaper !== undefined) u.chatWallpaper = chatWallpaper;
       if (twoFactorEnabled !== undefined) u.twoFactorEnabled = Boolean(twoFactorEnabled);
       updatedUser = u;
     }
@@ -1341,12 +1462,13 @@ app.post('/api/chats', (req: Request, res: Response) => {
   }
 
   // Group chat
+  const savedGroupAvatar = saveBase64ToVpsDisk(avatar, 'group');
   const newGroup: Chat = {
     id: `chat_grp_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
     type: 'group',
     name: name || 'New Community Group',
     description: description || '',
-    avatar: avatar || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80',
+    avatar: savedGroupAvatar || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80',
     participantIds: [userId, ...(Array.isArray(req.body.participantIds) ? req.body.participantIds : [])],
     adminIds: [userId],
     inviteCode: crypto.randomBytes(4).toString('hex'),
@@ -1451,6 +1573,9 @@ app.post('/api/messages', async (req: Request, res: Response) => {
     }
   }
 
+  const mediaPrefix = type === 'audio' ? 'voice' : type === 'video' ? 'video' : type === 'image' ? 'img' : 'file';
+  const persistedMediaUrl = saveBase64ToVpsDisk(mediaUrl, mediaPrefix);
+
   const newMessage: Message = {
     id: `msg_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
     chatId,
@@ -1459,7 +1584,7 @@ app.post('/api/messages', async (req: Request, res: Response) => {
     senderAvatar: sender.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
     content: (content || '').trim(),
     type,
-    mediaUrl,
+    mediaUrl: persistedMediaUrl,
     fileName,
     fileSize,
     audioDuration,
@@ -1695,6 +1820,7 @@ app.delete('/api/messages/:id', (req: Request, res: Response) => {
       targetChat = d.chats.find(c => c.id === msg.chatId) || null;
       if (type === 'everyone') {
         if (msg.senderId === userId || (targetChat && targetChat.adminIds?.includes(userId))) {
+          deleteVpsUploadIfLocal(msg.mediaUrl);
           msg.isDeletedForEveryone = true;
           msg.content = 'This message was deleted';
           msg.mediaUrl = undefined;
@@ -1794,7 +1920,18 @@ app.get('/api/stories', (req: Request, res: Response) => {
   const now = Date.now();
   const data = db.get();
   // Filter stories that have not expired
-  const activeStories = data.stories.filter(s => s.expiresAt > now);
+  const activeStories = data.stories.filter(s => s.expiresAt > now).map(s => {
+    if (s.song && !s.song.audioUrl) {
+      return {
+        ...s,
+        song: {
+          ...s.song,
+          audioUrl: `/audio/${s.song.id}.wav`,
+        },
+      };
+    }
+    return s;
+  });
 
   return res.json({ stories: activeStories });
 });
@@ -1803,11 +1940,19 @@ app.post('/api/stories', (req: Request, res: Response) => {
   const userId = getAuthUserId(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { type, content, backgroundColor, mediaUrl, fontStyle } = req.body;
+  const { type, content, backgroundColor, mediaUrl, fontStyle, song } = req.body;
   if (!content && !mediaUrl) return res.status(400).json({ error: 'Story content or media is required' });
 
   const user = db.get().users.find(u => u.id === userId);
   if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const persistedStoryMedia = saveBase64ToVpsDisk(mediaUrl, 'story');
+  const resolvedSong = song
+    ? {
+        ...song,
+        audioUrl: saveBase64ToVpsDisk(song.audioUrl, 'story_song') || (song.id ? `/audio/${song.id}.wav` : undefined),
+      }
+    : undefined;
 
   const newStory: Story = {
     id: `story_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
@@ -1818,7 +1963,8 @@ app.post('/api/stories', (req: Request, res: Response) => {
     content: content || '',
     backgroundColor: backgroundColor || 'from-teal-800 to-emerald-950',
     fontStyle: fontStyle || 'sans',
-    mediaUrl,
+    mediaUrl: persistedStoryMedia,
+    song: resolvedSong,
     viewers: [],
     expiresAt: Date.now() + 24 * 3600000, // 24 hours
     createdAt: new Date().toISOString(),
@@ -1866,6 +2012,13 @@ app.delete('/api/stories/:id', (req: Request, res: Response) => {
   const { id } = req.params;
 
   db.update(d => {
+    const target = d.stories.find(s => s.id === id && s.userId === userId);
+    if (target) {
+      deleteVpsUploadIfLocal(target.mediaUrl);
+      if (target.song?.audioUrl?.startsWith('/uploads/')) {
+        deleteVpsUploadIfLocal(target.song.audioUrl);
+      }
+    }
     d.stories = d.stories.filter(s => s.id !== id || s.userId !== userId);
   });
 
@@ -1888,14 +2041,16 @@ app.post('/api/channels', (req: Request, res: Response) => {
   if (!name || !handle) return res.status(400).json({ error: 'Channel name and handle required' });
 
   const cleanHandle = handle.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const savedAvatar = saveBase64ToVpsDisk(avatar, 'channel');
+  const savedCover = saveBase64ToVpsDisk(coverImage, 'channel_cover');
 
   const newChannel: Channel = {
     id: `chn_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
     name: name.trim(),
     handle: cleanHandle,
     description: description || '',
-    avatar: avatar || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80',
-    coverImage: coverImage || 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800&auto=format&fit=crop&q=80',
+    avatar: savedAvatar || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80',
+    coverImage: savedCover || 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800&auto=format&fit=crop&q=80',
     ownerId: userId,
     verified: false,
     subscribersCount: 1,
@@ -1959,13 +2114,15 @@ app.post('/api/channels/:id/posts', (req: Request, res: Response) => {
 
   const sender = data.users.find(u => u.id === userId);
 
+  const savedPostMedia = saveBase64ToVpsDisk(mediaUrl, 'post');
+
   const post: ChannelPost = {
     id: `post_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
     channelId: id,
     senderId: userId,
     senderName: sender?.displayName || sender?.username || 'Channel Admin',
     content: content.trim(),
-    mediaUrl,
+    mediaUrl: savedPostMedia,
     likesCount: 0,
     likedBy: [],
     createdAt: new Date().toISOString(),
@@ -2189,6 +2346,10 @@ async function startServer() {
     if (isProd && !hasDist) {
       console.log('[Pterodactyl Auto-Setup] "dist" build not found yet. Automatically mounting Vite middleware so application starts immediately without manual build!');
     }
+    // Serve static files from public/ directly (including /audio/*.wav and assets)
+    app.use(express.static(path.resolve(__dirname, 'public')));
+    app.use('/audio', express.static(path.resolve(__dirname, 'public/audio')));
+
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -2196,6 +2357,8 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
+    app.use(express.static(path.resolve(__dirname, 'public')));
+    app.use('/audio', express.static(path.resolve(__dirname, 'public/audio')));
     app.use(express.static(distPath));
     app.get('*', (req: Request, res: Response) => {
       res.sendFile(path.join(distPath, 'index.html'));

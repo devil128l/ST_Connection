@@ -115,6 +115,7 @@ export default function App() {
   return (
     <MainChatApp
       currentUser={currentUser}
+      onUpdateUser={(updated) => setCurrentUser(updated)}
       onLogout={() => {
         api.clearAuthSession();
         setCurrentUser(null);
